@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { InstallBanner } from "@/components/pwa/install-banner";
+import { SITE, siteUrl } from "@/lib/site";
 import { ServiceWorkerRegistration } from "./service-worker-registration";
 
 const geistSans = Geist({
@@ -15,14 +16,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Farm Korret Nig",
-  applicationName: "Farm Korret Nig",
-  description:
-    "Farm Korret Nig — the poultry farming and agricultural marketplace for Nigerian farmers.",
+  // share previews need absolute URLs; relative ones below resolve against this
+  metadataBase: siteUrl(),
+  title: { default: SITE.name, template: `%s · ${SITE.name}` },
+  applicationName: SITE.name,
+  description: SITE.description,
+  openGraph: {
+    type: "website",
+    siteName: SITE.name,
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+    url: "/",
+    locale: "en_NG",
+    // the image comes from app/opengraph-image.tsx
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Farm Korret",
+    title: SITE.shortName,
   },
   // favicon.ico, icon.png and apple-icon.png in app/ supply the icon tags
 };
