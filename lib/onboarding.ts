@@ -79,3 +79,13 @@ export function useOnboardingStep(
 
   return isAllowed ? state : null;
 }
+
+/** Forgets the sign-up progress (after finishing, or on sign-out). */
+export function clearOnboarding() {
+  try {
+    window.sessionStorage.removeItem(KEY);
+  } catch {
+    // storage unavailable; nothing to clear
+  }
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}

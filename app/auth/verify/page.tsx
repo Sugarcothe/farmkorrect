@@ -55,7 +55,7 @@ export default function Verify() {
     const res = await verifyOtp({ phone, code });
     if (res.ok) {
       updateOnboarding({ phoneVerified: true });
-      router.push("/farm-setup");
+      router.replace(res.data.next === "home" ? "/home" : "/farm-setup");
       return;
     }
     setVerifying(false);
