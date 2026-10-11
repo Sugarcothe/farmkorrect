@@ -8,7 +8,7 @@ import { getFixedOtpCode, getTermiiConfig, isDevSmsConsoleEnabled } from "../con
 export type DeliveryResult = { delivered: true } | { delivered: false; reason: string };
 
 export function isSmsConfigured(): boolean {
-  return getTermiiConfig() !== null || isDevSmsConsoleEnabled();
+  return getTermiiConfig() !== null || getFixedOtpCode() !== null || isDevSmsConsoleEnabled();
 }
 
 export async function sendSms(toE164: string, message: string): Promise<DeliveryResult> {
