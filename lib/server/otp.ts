@@ -1,6 +1,6 @@
 import "server-only";
 import { MongoServerError, ObjectId, type ClientSession } from "mongodb";
-import { getAuthConfig } from "./config";
+import { getAuthConfig, getFixedOtpCode } from "./config";
 import { hmac, randomOtp, safeEqualHex } from "./crypto";
 import { getDb } from "./db";
 import { COLLECTIONS, type OtpChallengeDoc, type OtpPurpose } from "./models";
@@ -73,7 +73,8 @@ export async function issueChallenge(
   );
 
   const challengeId = new ObjectId();
-  const code = randomOtp();
+  const code = getFixedOtpCode() ?? randomOtp();
+
   try {
     await collection.insertOne(
       {

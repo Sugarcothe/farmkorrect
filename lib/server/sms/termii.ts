@@ -1,5 +1,5 @@
 import "server-only";
-import { getTermiiConfig, isDevSmsConsoleEnabled } from "../config";
+import { getFixedOtpCode, getTermiiConfig, isDevSmsConsoleEnabled } from "../config";
 
 // Nigerian SMS delivery through Termii's Messaging API
 // (POST {base}/api/sms/send). Only the outcome is reported back; message text,
@@ -14,6 +14,7 @@ export function isSmsConfigured(): boolean {
 export async function sendSms(toE164: string, message: string): Promise<DeliveryResult> {
   const config = getTermiiConfig();
   if (!config) {
+    if (getFixedOtpCode() !== null) return { delivered: true };
     if (!isDevSmsConsoleEnabled()) return { delivered: false, reason: "not_configured" };
     // development only (see isDevSmsConsoleEnabled): the terminal is the "phone"
     console.info(`
