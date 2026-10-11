@@ -1,17 +1,8 @@
-"use client";
+import { SignOutButton } from "@/components/home/sign-out-button";
+import { requireVerifiedPageSession } from "@/lib/server/auth";
 
-import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { getPhone, signOut } from "@/lib/storage";
-
-export default function Home() {
-  const router = useRouter();
-  const phone = getPhone();
-
-  function handleSignOut() {
-    signOut();
-    router.replace("/auth/sign-in");
-  }
+export default async function Home() {
+  const { user } = await requireVerifiedPageSession();
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 px-8 text-center">
@@ -20,13 +11,10 @@ export default function Home() {
           You&apos;re in 🎉
         </h1>
         <p className="text-sm text-foreground/60">
-          Signed in as {phone ?? "your account"}. The farm dashboard goes
-          here next.
+          Signed in as {user.fullName}. The farm dashboard goes here next.
         </p>
       </div>
-      <Button variant="outline" className="max-w-xs" onClick={handleSignOut}>
-        Sign Out
-      </Button>
+      <SignOutButton />
     </main>
   );
 }

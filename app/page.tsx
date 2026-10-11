@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { isAuthed, isOnboarded } from "@/lib/storage";
+import { getSession } from "@/lib/auth/api";
+import { isOnboarded } from "@/lib/storage";
 
 const SPLASH_DURATION_MS = 1800;
 
@@ -11,9 +12,14 @@ export default function Splash() {
   const router = useRouter();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (isAuthed()) {
-        router.replace("/home");
+    // ask the server (it reads the httpOnly cookie) while the splash shows
+    const session = getSession();
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const res = await session;
+      if (cancelled) return;
+      if (res.ok) {
+        router.replace(res.data.farmSetupComplete ? "/home" : "/farm-setup");
       } else if (isOnboarded()) {
         router.replace("/auth/sign-in");
       } else {
@@ -21,7 +27,10 @@ export default function Splash() {
       }
     }, SPLASH_DURATION_MS);
 
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [router]);
 
   return (
