@@ -1,5 +1,5 @@
 import "server-only";
-import { getTermiiConfig } from "../config";
+import { getTermiiConfig, isDevSmsConsoleEnabled } from "../config";
 
 // Nigerian SMS delivery through Termii's Messaging API
 // (POST {base}/api/sms/send). Only the outcome is reported back; message text,
@@ -8,12 +8,19 @@ import { getTermiiConfig } from "../config";
 export type DeliveryResult = { delivered: true } | { delivered: false; reason: string };
 
 export function isSmsConfigured(): boolean {
-  return getTermiiConfig() !== null;
+  return getTermiiConfig() !== null || isDevSmsConsoleEnabled();
 }
 
 export async function sendSms(toE164: string, message: string): Promise<DeliveryResult> {
   const config = getTermiiConfig();
-  if (!config) return { delivered: false, reason: "not_configured" };
+  if (!config) {
+    if (!isDevSmsConsoleEnabled()) return { delivered: false, reason: "not_configured" };
+    // development only (see isDevSmsConsoleEnabled): the terminal is the "phone"
+    console.info(`
+[dev sms] to ${toE164}: ${message}
+`);
+    return { delivered: true };
+  }
 
   try {
     const res = await fetch(`${config.baseUrl}/api/sms/send`, {

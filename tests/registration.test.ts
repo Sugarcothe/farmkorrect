@@ -136,3 +136,27 @@ describe("POST /api/auth/register", () => {
     expect(statuses[5]).toBe(429);
   });
 });
+
+describe("development SMS console", () => {
+  it("prints the code to the server console when enabled outside production", async () => {
+    vi.stubEnv("TERMII_API_KEY", "");
+    vi.stubEnv("SMS_DEV_CONSOLE", "true");
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const input = newRegistration();
+
+    const res = await call(register, "/api/auth/register", { body: input });
+    expect(res.status).toBe(201);
+    expect(outbox.sms).toHaveLength(0);
+    expect(String(info.mock.calls.at(-1)?.[0])).toMatch(/\[dev sms\].*\b\d{6}\b/);
+    expect((await userByPhone(input.phone))!.status).toBe("pending_verification");
+    info.mockRestore();
+  });
+
+  it("is ignored in production", async () => {
+    vi.stubEnv("TERMII_API_KEY", "");
+    vi.stubEnv("SMS_DEV_CONSOLE", "true");
+    vi.stubEnv("NODE_ENV", "production");
+    const res = await call(register, "/api/auth/register", { body: newRegistration() });
+    expect(res.status).toBe(503);
+  });
+});
