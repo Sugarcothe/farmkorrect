@@ -101,6 +101,13 @@ export function isDevSmsConsoleEnabled(): boolean {
 }
 
 export type ResendConfig = { apiKey: string; from: string };
+/** Demo only: while Termii isn't configured, every code is OTP_FIXED_CODE and no SMS is sent. */
+export function getFixedOtpCode(): string | null {
+  const code = read("OTP_FIXED_CODE");
+  if (!code || getTermiiConfig() !== null) return null;
+  if (!/^\d{6}$/.test(code)) throw new ConfigError("OTP_FIXED_CODE must be exactly six digits.");
+  return code;
+}
 
 /** null when email delivery hasn't been configured */
 export function getResendConfig(): ResendConfig | null {
