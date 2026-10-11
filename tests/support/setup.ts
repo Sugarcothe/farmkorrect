@@ -23,6 +23,7 @@ const TEST_ENV: Record<string, string> = {
   TERMII_SENDER_ID: "FarmKorret",
   TERMII_BASE_URL: "https://termii.invalid",
   TERMII_CHANNEL: "dnd",
+  SMS_DEV_CONSOLE: "",
   RESEND_API_KEY: "",
   EMAIL_FROM: "",
   TRUST_PROXY_HEADERS: "true",

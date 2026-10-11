@@ -90,6 +90,16 @@ export function getTermiiConfig(): TermiiConfig | null {
   return { apiKey, senderId, baseUrl, channel: read("TERMII_CHANNEL") ?? "dnd" };
 }
 
+/**
+ * Local development without an SMS provider: when SMS_DEV_CONSOLE=true and
+ * Termii isn't configured, messages are printed to the server console instead
+ * of texted. Codes still have to be entered and checked as normal. Never
+ * honoured in production builds.
+ */
+export function isDevSmsConsoleEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && read("SMS_DEV_CONSOLE") === "true";
+}
+
 export type ResendConfig = { apiKey: string; from: string };
 
 /** null when email delivery hasn't been configured */
