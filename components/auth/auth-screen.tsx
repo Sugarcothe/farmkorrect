@@ -38,7 +38,7 @@ export function AuthScreen({ backHref, topBar, children }: AuthScreenProps) {
 export function BrandMark() {
   return (
     <div className="relative mx-auto size-[72px] overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-primary/10">
-      <Image src="/fk-logo.png" alt="Farm Korrect" fill sizes="72px" preload />
+      <Image src="/fk-logo.png" alt="Farm Korect" fill sizes="72px" preload />
     </div>
   );
 }

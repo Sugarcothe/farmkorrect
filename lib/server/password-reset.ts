@@ -63,13 +63,13 @@ export async function sendPasswordReset(user: UserDoc): Promise<DeliveryResult> 
     channel === "email"
       ? await sendEmail({
           to: user.emailNormalized,
-          subject: "Reset your Farm Korret Nig password",
+          subject: "Reset your Farm Korect Nig password",
           text: `Hi ${user.fullName},\n\nUse this link to choose a new password. It expires in 30 minutes and can be used once:\n\n${link}\n\nIf you didn't ask to reset your password, ignore this email — your password won't change.`,
           html: resetEmailHtml(user.fullName, link),
         })
       : await sendSms(
           user.phoneNormalized,
-          `Reset your Farm Korret Nig password (link valid 30 min, single use): ${link} If you didn't request this, ignore this message.`,
+          `Reset your Farm Korect Nig password (link valid 30 min, single use): ${link} If you didn't request this, ignore this message.`,
         );
 
   await collection.updateOne(
@@ -116,7 +116,7 @@ function escapeHtml(value: string) {
 
 function resetEmailHtml(fullName: string, link: string) {
   return `<p>Hi ${escapeHtml(fullName)},</p>
-<p>Use the button below to choose a new password for Farm Korret Nig. The link expires in 30 minutes and can be used once.</p>
+<p>Use the button below to choose a new password for Farm Korect Nig. The link expires in 30 minutes and can be used once.</p>
 <p><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#004b2e;color:#ffffff;border-radius:999px;text-decoration:none;font-weight:600">Reset password</a></p>
 <p>If you didn't ask to reset your password, ignore this email — your password won't change.</p>`;
 }
