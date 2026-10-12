@@ -1,11 +1,9 @@
-"use client";
-
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AuthScreen, ScreenHeading } from "@/components/auth/auth-screen";
-import { buttonClasses } from "@/components/ui/button";
+import { DashboardLink } from "@/components/farm/dashboard-link";
 import { Icon, type IconName } from "@/components/ui/icons";
-import { useOnboardingStep } from "@/lib/onboarding";
-import { setOnboarded } from "@/lib/storage";
+import { requireVerifiedPageSession } from "@/lib/server/auth";
+import { findInitialFarm } from "@/lib/server/farms";
 
 const benefits: { icon: IconName; title: string; description: string }[] = [
   {
@@ -31,10 +29,10 @@ const benefits: { icon: IconName; title: string; description: string }[] = [
   },
 ];
 
-export default function Success() {
-  // only reachable once the server has confirmed the farm was saved
-  const onboarding = useOnboardingStep((s) => !!s.setupComplete, "/farm-setup");
-  if (!onboarding) return null;
+export default async function Success() {
+  // only reachable once the farm is actually saved for this account
+  const { user } = await requireVerifiedPageSession();
+  if (!(await findInitialFarm(user._id))) redirect("/farm-setup");
 
   return (
     <AuthScreen>
@@ -42,11 +40,9 @@ export default function Success() {
         <Icon name="check" className="size-8 stroke-[2.5]" />
       </div>
       <ScreenHeading title="You're All Set!">
-        {onboarding.fullName && (
-          <span className="block font-semibold text-primary">
-            Welcome, {onboarding.fullName}
-          </span>
-        )}
+        <span className="block font-semibold text-primary">
+          Welcome, {user.fullName}
+        </span>
         <span className="mt-1 block">
           Your farm profile has been created successfully. Here is a summary
           of what you can do right now:
@@ -75,13 +71,7 @@ export default function Success() {
       </ul>
 
       <div className="mt-auto pt-8">
-        <Link
-          href="/home"
-          onClick={() => setOnboarded()}
-          className={buttonClasses("solid")}
-        >
-          Go to Dashboard
-        </Link>
+        <DashboardLink />
       </div>
     </AuthScreen>
   );

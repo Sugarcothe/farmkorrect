@@ -60,6 +60,42 @@ export type FarmSetupRequest = {
   yearsOfExperience: number;
 };
 
+/** Completes a reset with the token from the link the user was sent. */
+export type NewPasswordRequest = {
+  token: string;
+  password: string;
+};
+
+// Response payloads (the `data` of a successful ApiResult).
+
+export type RegisterResponse = {
+  /** E.164 number the verification code was sent to */
+  phone: string;
+};
+
+/** Where the app should take the user after logging in. */
+export type LoginResponse =
+  | { next: "home" | "farm-setup" }
+  | { next: "verify"; phone: string; fullName: string };
+
+export type VerifyOtpResponse = { next: "farm-setup" | "home" };
+
+export type SessionUser = {
+  fullName: string;
+  role: Role;
+  email: string;
+  phone: string;
+};
+
+export type SessionResponse = {
+  user: SessionUser;
+  farmSetupComplete: boolean;
+};
+
+export type Farm = FarmSetupRequest & { id: string };
+
+export type FarmResponse = { farm: Farm };
+
 export type ApiResult<T = null> =
   | { ok: true; data: T }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };

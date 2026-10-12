@@ -17,6 +17,7 @@ import {
   normalizeIdentifier,
   validateIdentifier,
 } from "@/lib/auth/validation";
+import { updateOnboarding } from "@/lib/onboarding";
 import { setOnboarded } from "@/lib/storage";
 import { useForm } from "@/lib/use-form";
 
@@ -39,7 +40,19 @@ export default function SignIn() {
     });
     if (res.ok) {
       setOnboarded();
-      router.replace("/home");
+      const next = res.data;
+      if (next.next === "verify") {
+        // the account exists but its phone was never confirmed: finish that first
+        updateOnboarding({
+          fullName: next.fullName,
+          phone: next.phone,
+          phoneVerified: false,
+          setupComplete: false,
+        });
+        router.push("/auth/verify");
+      } else {
+        router.replace(next.next === "home" ? "/home" : "/farm-setup");
+      }
       return;
     }
     setSubmitting(false);
