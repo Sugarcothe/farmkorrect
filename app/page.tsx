@@ -41,7 +41,7 @@ export default function Splash() {
           <Image src="/fk-logo.png" alt="" fill sizes="112px" preload />
         </div>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-white">
-          Farm Korrect
+          Farm Korect
         </h1>
         <p className="mt-1.5 text-sm font-medium text-white/70">
           Everything poultry, one app
