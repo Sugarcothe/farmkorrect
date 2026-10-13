@@ -1,5 +1,6 @@
 import { PHOTO_RULES } from "@/lib/profile/config";
 import type { ProfilePhotoResponse } from "@/lib/profile/types";
+import { isImageStorageConfigured, PHOTO_UNAVAILABLE } from "@/lib/server/cloudinary";
 import { declaredPhotoType, processAvatar } from "@/lib/server/images";
 import {
   assertSameOrigin,
@@ -9,36 +10,22 @@ import {
   route,
   tooManyRequests,
 } from "@/lib/server/http";
-import { deleteProfilePhoto, findProfilePhoto, photoUrl, saveProfilePhoto } from "@/lib/server/profile";
+import { deleteProfilePhoto, saveProfilePhoto } from "@/lib/server/profile";
 import { hit } from "@/lib/server/rate-limit";
 import { requireVerifiedRequest } from "@/lib/server/sessions";
 
 // The signed-in user's profile photo. Uploads are the raw image bytes (not a
-// form), capped in size, checked by their actual content and re-encoded
-// before storage. The photo is only served to its owner and never cached.
+// form), capped in size, checked by their actual content and re-encoded on
+// this server; only the cleaned WebP is sent on to Cloudinary, which serves it.
 
 const MAX_MB = PHOTO_RULES.maxBytes / (1024 * 1024);
 
 const UNVERIFIED = "Verify your phone number before managing your profile.";
 
-export const GET = route("profile-photo", async (request) => {
-  const { user } = await requireVerifiedRequest(request, UNVERIFIED);
-  const photo = await findProfilePhoto(user._id);
-  if (!photo) throw new HttpError(404, "No profile photo has been added.");
-  return new Response(new Uint8Array(photo.data.buffer), {
-    headers: {
-      "Content-Type": photo.contentType,
-      "Content-Length": String(photo.size),
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-      "Content-Security-Policy": "default-src 'none'",
-    },
-  });
-});
-
 export const POST = route("profile-photo", async (request) => {
   assertSameOrigin(request);
   const { user } = await requireVerifiedRequest(request, UNVERIFIED);
+  if (!isImageStorageConfigured()) throw new HttpError(503, PHOTO_UNAVAILABLE);
 
   const declared = declaredPhotoType(request.headers.get("content-type"));
   if (!declared) throw new HttpError(415, "Choose a JPG, PNG or WebP photo.");
@@ -53,8 +40,7 @@ export const POST = route("profile-photo", async (request) => {
     `That photo is too large. Choose one under ${MAX_MB} MB.`,
   );
   const avatar = await processAvatar(bytes, declared);
-  const updatedAt = await saveProfilePhoto(user._id, avatar);
-  return ok<ProfilePhotoResponse>({ photoUrl: photoUrl(updatedAt) });
+  return ok<ProfilePhotoResponse>({ photoUrl: await saveProfilePhoto(user._id, avatar.data) });
 });
 
 export const DELETE = route("profile-photo", async (request) => {

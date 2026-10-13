@@ -1,23 +1,16 @@
 import "server-only";
-import { Binary, ObjectId, type ClientSession, type Collection } from "mongodb";
+import { ObjectId, type ClientSession, type Collection } from "mongodb";
 import type { Profile } from "@/lib/profile/types";
+import { destroyImage, uploadImage } from "./cloudinary";
 import { getDb, getMongoClient } from "./db";
 import { findInitialFarm } from "./farms";
 import { HttpError } from "./http";
-import { COLLECTIONS, type FarmDoc, type ProfilePhotoDoc, type UserDoc } from "./models";
+import { COLLECTIONS, type FarmDoc, type ProfilePhotoRef, type UserDoc } from "./models";
 import { users } from "./users";
 import type { ProfileUpdate } from "./validation";
 
 // The signed-in user's own profile. Every function takes the account from the
 // server-side session; nothing here accepts a user id from a request.
-
-async function photos() {
-  return (await getDb()).collection<ProfilePhotoDoc>(COLLECTIONS.profilePhotos);
-}
-
-export function photoUrl(updatedAt: Date) {
-  return `/api/profile/photo?v=${updatedAt.getTime()}`;
-}
 
 /**
  * Builds the public profile. Accounts that have never edited their profile
@@ -33,7 +26,7 @@ export function toProfile(user: UserDoc, farm: FarmDoc | null): Profile {
     fullName: user.fullName,
     email: user.emailNormalized,
     phone: user.phoneNormalized,
-    photoUrl: details.photoUpdatedAt ? photoUrl(details.photoUpdatedAt) : null,
+    photoUrl: details.photo?.url ?? null,
     bio: details.bio ?? "",
     location: isFarmer ? (farm?.location ?? "") : (details.location ?? farm?.location ?? ""),
     yearsOfExperience: isFarmer
@@ -180,56 +173,43 @@ async function updateFarm(
   );
 }
 
-/** Stores an already re-encoded photo and points the profile at it. */
-export async function saveProfilePhoto(
-  userId: ObjectId,
-  image: { data: Buffer; width: number; height: number },
-): Promise<Date> {
-  const client = await getMongoClient();
-  const photoCollection = await photos();
-  const userCollection = await users();
+/**
+ * Uploads an already re-encoded photo to Cloudinary, then points the profile
+ * at it. If the profile can't be updated the new file is removed again; once
+ * it is, the previous file is removed.
+ */
+export async function saveProfilePhoto(userId: ObjectId, data: Buffer): Promise<string> {
+  const stored = await uploadImage(data);
   const now = new Date();
+  const photo: ProfilePhotoRef = { ...stored, updatedAt: now };
 
-  await client.withSession((dbSession) =>
-    dbSession.withTransaction(async () => {
-      await photoCollection.replaceOne(
-        { _id: userId },
-        {
-          data: new Binary(image.data),
-          contentType: "image/webp",
-          size: image.data.byteLength,
-          width: image.width,
-          height: image.height,
-          updatedAt: now,
-        },
-        { upsert: true, session: dbSession },
-      );
-      await userCollection.updateOne(
-        { _id: userId },
-        { $set: { "profile.photoUpdatedAt": now, updatedAt: now } },
-        { session: dbSession },
-      );
-    }),
-  );
-  return now;
-}
+  let before: UserDoc | null;
+  try {
+    before = await (await users()).findOneAndUpdate(
+      { _id: userId, status: "active" },
+      { $set: { "profile.photo": photo, updatedAt: now } },
+      { returnDocument: "before", projection: { "profile.photo": 1 } },
+    );
+  } catch (error) {
+    await destroyImage(stored.publicId);
+    throw error;
+  }
+  if (!before) {
+    await destroyImage(stored.publicId);
+    throw new HttpError(401, "Your session has ended. Please log in again.");
+  }
 
-export async function findProfilePhoto(userId: ObjectId): Promise<ProfilePhotoDoc | null> {
-  return (await photos()).findOne({ _id: userId });
+  const previous = before.profile?.photo?.publicId;
+  if (previous) await destroyImage(previous);
+  return stored.url;
 }
 
 export async function deleteProfilePhoto(userId: ObjectId) {
-  const client = await getMongoClient();
-  const photoCollection = await photos();
-  const userCollection = await users();
-  await client.withSession((dbSession) =>
-    dbSession.withTransaction(async () => {
-      await photoCollection.deleteOne({ _id: userId }, { session: dbSession });
-      await userCollection.updateOne(
-        { _id: userId },
-        { $unset: { "profile.photoUpdatedAt": "" }, $set: { updatedAt: new Date() } },
-        { session: dbSession },
-      );
-    }),
+  const before = await (await users()).findOneAndUpdate(
+    { _id: userId },
+    { $unset: { "profile.photo": "" }, $set: { updatedAt: new Date() } },
+    { returnDocument: "before", projection: { "profile.photo": 1 } },
   );
+  const previous = before?.profile?.photo?.publicId;
+  if (previous) await destroyImage(previous);
 }

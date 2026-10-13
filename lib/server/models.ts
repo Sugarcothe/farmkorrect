@@ -1,4 +1,4 @@
-import type { Binary, ObjectId } from "mongodb";
+import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { CredentialStatus } from "@/lib/profile/types";
 
@@ -12,7 +12,6 @@ export const COLLECTIONS = {
   passwordResets: "password_resets",
   farms: "farms",
   rateLimits: "rate_limits",
-  profilePhotos: "profile_photos",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -40,7 +39,7 @@ export type UserDoc = {
 
 /**
  * Self-described profile details. Farmers' farm details live in the farms
- * collection; the photo itself lives in profile_photos.
+ * collection; the photo file itself is stored on Cloudinary.
  */
 export type UserProfileDoc = {
   bio?: string;
@@ -57,8 +56,7 @@ export type UserProfileDoc = {
    */
   credentialStatus?: CredentialStatus;
   credentialSubmittedAt?: Date;
-  /** when the current photo was saved; versions the photo URL */
-  photoUpdatedAt?: Date;
+  photo?: ProfilePhotoRef;
 };
 
 /**
@@ -129,13 +127,12 @@ export type FarmDoc = {
   updatedAt: Date;
 };
 
-/** One re-encoded avatar per user, kept out of the user document. */
-export type ProfilePhotoDoc = {
-  /** the owner's user id */
-  _id: ObjectId;
-  data: Binary;
-  contentType: "image/webp";
-  size: number;
+/** Where the current avatar is stored: a re-encoded WebP on Cloudinary. */
+export type ProfilePhotoRef = {
+  /** Cloudinary public id, used to delete the file once it's replaced */
+  publicId: string;
+  /** https delivery URL */
+  url: string;
   width: number;
   height: number;
   updatedAt: Date;

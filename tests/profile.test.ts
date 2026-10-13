@@ -2,15 +2,12 @@ import { Collection, MongoServerError } from "mongodb";
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { GET as getProfile, PATCH as patchProfile } from "@/app/api/profile/route";
-import {
-  DELETE as deletePhoto,
-  GET as getPhoto,
-  POST as uploadPhoto,
-} from "@/app/api/profile/photo/route";
+import { DELETE as deletePhoto, POST as uploadPhoto } from "@/app/api/profile/photo/route";
 import type { ProfilePhotoResponse, ProfileResponse } from "@/lib/profile/types";
 import { collections, userByPhone } from "./support/db";
 import { FARM, newRegistration, registerPending, registerVerified, registerWithFarm } from "./support/flows";
-import { call, dataOf, ORIGIN, type CallOptions } from "./support/http";
+import { call, dataOf, type CallOptions } from "./support/http";
+import { outbox } from "./support/outbox";
 
 const read = (cookie?: string) => call<ProfileResponse>(getProfile, "/api/profile", { cookie });
 
@@ -31,13 +28,6 @@ async function png(width = 800, height = 600) {
 
 const upload = (bytes: Uint8Array, cookie?: string, contentType = "image/png", origin?: string | null) =>
   call<ProfilePhotoResponse>(uploadPhoto, "/api/profile/photo", { binaryBody: bytes, cookie, contentType, origin });
-
-/** The photo endpoint answers with image bytes, not JSON. */
-async function fetchPhoto(cookie?: string) {
-  const headers = new Headers({ "x-real-ip": "203.0.113.10" });
-  if (cookie) headers.set("cookie", `fk_session=${cookie}`);
-  return getPhoto(new Request(`${ORIGIN}/api/profile/photo`, { headers }));
-}
 
 describe("GET /api/profile", () => {
   it("requires a signed-in, verified account", async () => {
@@ -358,7 +348,9 @@ describe("PATCH /api/profile", () => {
 });
 
 describe("profile photo", () => {
-  it("re-encodes an upload to a small WebP without metadata and serves it to its owner only", async () => {
+  const CLOUD_URL = /^https:\/\/res\.cloudinary\.com\/test-cloud\/image\/upload\/v1\/farm-korret\/avatars\/[0-9a-f]{32}\.webp$/;
+
+  it("re-encodes an upload to a small WebP without metadata before it goes to Cloudinary", async () => {
     const { input, cookie } = await registerWithFarm();
     const original = await sharp({ create: { width: 1600, height: 1200, channels: 3, background: "#c62828" } })
       .jpeg()
@@ -368,43 +360,38 @@ describe("profile photo", () => {
 
     const res = await upload(original, cookie, "image/jpeg");
     expect(res.status).toBe(200);
-    expect(dataOf(res).photoUrl).toMatch(/^\/api\/profile\/photo\?v=\d+$/);
+    expect(dataOf(res).photoUrl).toMatch(CLOUD_URL);
     expect(dataOf(await read(cookie)).profile.photoUrl).toBe(dataOf(res).photoUrl);
 
-    const user = await userByPhone(input.phone);
-    expect(user).not.toHaveProperty("photo");
-    expect(JSON.stringify(user)).not.toMatch(/data:image|base64/);
-
-    const stored = await (await collections()).photos.findOne({ _id: user!._id });
-    expect(stored!.contentType).toBe("image/webp");
-    const meta = await sharp(stored!.data.buffer).metadata();
+    // only the cleaned image was uploaded
+    expect(outbox.images.size).toBe(1);
+    const [[publicId, uploaded]] = [...outbox.images];
+    const meta = await sharp(uploaded).metadata();
     expect(meta).toMatchObject({ format: "webp", width: 512, height: 512 });
     expect(meta.exif).toBeUndefined();
 
-    const served = await fetchPhoto(cookie);
-    expect(served.status).toBe(200);
-    expect(served.headers.get("content-type")).toBe("image/webp");
-    expect(served.headers.get("cache-control")).toBe("private, no-store");
-    expect(served.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(Buffer.from(await served.arrayBuffer()).equals(Buffer.from(stored!.data.buffer))).toBe(true);
+    // the request was signed; the secret itself was never sent
+    expect(JSON.stringify(outbox.imageRequests)).not.toContain("test-cloudinary-secret");
+    expect(outbox.imageRequests[0]).toMatchObject({ public_id: publicId, overwrite: "false" });
 
-    // another account gets its own (missing) photo, never this one
-    const other = await registerWithFarm();
-    expect((await fetchPhoto(other.cookie)).status).toBe(404);
-    expect((await fetchPhoto()).status).toBe(401);
+    // the user document only references the file
+    const user = await userByPhone(input.phone);
+    expect(user!.profile!.photo).toMatchObject({ publicId, url: dataOf(res).photoUrl, width: 512, height: 512 });
+    expect(JSON.stringify(user)).not.toMatch(/data:image|base64|Binary/);
   });
 
-  it("replaces the previous photo and can remove it", async () => {
+  it("replaces the previous photo, deleting the old file, and can remove it", async () => {
     const { input, cookie } = await registerWithFarm();
-    dataOf(await upload(await png(), cookie));
-    dataOf(await upload(await png(300, 900), cookie));
-    const { photos } = await collections();
-    expect(await photos.countDocuments()).toBe(1);
+    const first = dataOf(await upload(await png(), cookie)).photoUrl;
+    const second = dataOf(await upload(await png(300, 900), cookie)).photoUrl;
+    expect(second).not.toBe(first);
+    expect(outbox.images.size).toBe(1);
+    expect(dataOf(await read(cookie)).profile.photoUrl).toBe(second);
 
     const removed = await call(deletePhoto, "/api/profile/photo", { method: "DELETE", cookie });
     expect(removed.status).toBe(200);
-    expect(await photos.countDocuments()).toBe(0);
-    expect((await userByPhone(input.phone))!.profile?.photoUpdatedAt).toBeUndefined();
+    expect(outbox.images.size).toBe(0);
+    expect((await userByPhone(input.phone))!.profile?.photo).toBeUndefined();
     expect(dataOf(await read(cookie)).profile.photoUrl).toBeNull();
   });
 
@@ -423,7 +410,7 @@ describe("profile photo", () => {
     expect((await upload(corrupt, cookie, "image/png")).status).toBe(400);
     expect((await upload(new Uint8Array(), cookie, "image/png")).status).toBe(400);
 
-    expect(await (await collections()).photos.countDocuments()).toBe(0);
+    expect(outbox.imageRequests).toHaveLength(0);
   });
 
   it("rejects photos over the size limit", async () => {
@@ -431,7 +418,7 @@ describe("profile photo", () => {
     const huge = Buffer.concat([await png(), Buffer.alloc(5 * 1024 * 1024)]);
     const res = await upload(huge, cookie);
     expect(res.status).toBe(413);
-    expect(await (await collections()).photos.countDocuments()).toBe(0);
+    expect(outbox.imageRequests).toHaveLength(0);
   });
 
   it("requires a signed-in, verified account and a same-origin request", async () => {
@@ -441,6 +428,49 @@ describe("profile photo", () => {
     expect((await upload(image, pendingCookie)).status).toBe(403);
     const { cookie } = await registerWithFarm();
     expect((await upload(image, cookie, "image/png", "https://evil.example")).status).toBe(403);
-    expect(await (await collections()).photos.countDocuments()).toBe(0);
+    expect((await call(deletePhoto, "/api/profile/photo", { method: "DELETE" })).status).toBe(401);
+    expect(outbox.imageRequests).toHaveLength(0);
+  });
+
+  it("reports a Cloudinary failure honestly and keeps the current photo", async () => {
+    const { input, cookie } = await registerWithFarm();
+    const current = dataOf(await upload(await png(), cookie)).photoUrl;
+
+    outbox.imagesFailing = true;
+    const res = await upload(await png(300, 300), cookie);
+    expect(res.status).toBe(502);
+    expect(res.json).toMatchObject({ ok: false, error: "We couldn't save your photo right now. Please try again." });
+    expect(JSON.stringify(res.json)).not.toMatch(/Server error|cloudinary/i);
+    expect((await userByPhone(input.phone))!.profile!.photo!.url).toBe(current);
+  });
+
+  it("removes the uploaded file again when the profile can't be updated", async () => {
+    const { input, cookie } = await registerWithFarm();
+    const original = Collection.prototype.findOneAndUpdate;
+    // fail only the profile write (the rate limiter uses this method too)
+    const spy = vi.spyOn(Collection.prototype, "findOneAndUpdate").mockImplementation(function (
+      this: Collection,
+      ...args: Parameters<Collection["findOneAndUpdate"]>
+    ) {
+      if (this.collectionName === "users") throw new MongoServerError({ message: "simulated outage" });
+      return original.apply(this, args);
+    } as Collection["findOneAndUpdate"]);
+    const res = await upload(await png(), cookie);
+    spy.mockRestore();
+
+    expect(res.status).toBe(500);
+    expect(JSON.stringify(res.json)).not.toContain("simulated outage");
+    expect(outbox.imageRequests.map((r) => r.public_id)).toHaveLength(2); // upload, then delete
+    expect(outbox.images.size).toBe(0);
+    expect((await userByPhone(input.phone))!.profile?.photo).toBeUndefined();
+  });
+
+  it("says uploads are unavailable when Cloudinary isn't configured", async () => {
+    const { cookie } = await registerWithFarm();
+    vi.stubEnv("CLOUDINARY_API_SECRET", "");
+    const res = await upload(await png(), cookie);
+    expect(res.status).toBe(503);
+    expect(res.json).toMatchObject({ ok: false, error: "Photo uploads aren't available right now. Please try again later." });
+    expect(outbox.imageRequests).toHaveLength(0);
   });
 });

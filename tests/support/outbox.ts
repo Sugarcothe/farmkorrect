@@ -3,6 +3,11 @@ export const outbox = {
   sms: [] as { to: string; text: string }[],
   email: [] as { to: string; subject: string; text: string }[],
   smsFailing: false,
+  /** images "stored" on the fake Cloudinary, by public id */
+  images: new Map<string, Buffer>(),
+  /** every field of every Cloudinary request, to check what was sent */
+  imageRequests: [] as Record<string, string>[],
+  imagesFailing: false,
 };
 
 /** Work scheduled with next/server `after()`; run it with flushAfter(). */
@@ -12,6 +17,9 @@ export function resetOutbox() {
   outbox.sms.length = 0;
   outbox.email.length = 0;
   outbox.smsFailing = false;
+  outbox.images.clear();
+  outbox.imageRequests.length = 0;
+  outbox.imagesFailing = false;
   pendingAfter.length = 0;
 }
 

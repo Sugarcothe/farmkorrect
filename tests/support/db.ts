@@ -4,7 +4,6 @@ import {
   type FarmDoc,
   type OtpChallengeDoc,
   type PasswordResetDoc,
-  type ProfilePhotoDoc,
   type SessionDoc,
   type UserDoc,
 } from "@/lib/server/models";
@@ -18,7 +17,6 @@ export async function collections() {
     otp: db.collection<OtpChallengeDoc>(COLLECTIONS.otpChallenges),
     resets: db.collection<PasswordResetDoc>(COLLECTIONS.passwordResets),
     farms: db.collection<FarmDoc>(COLLECTIONS.farms),
-    photos: db.collection<ProfilePhotoDoc>(COLLECTIONS.profilePhotos),
   };
 }
 
