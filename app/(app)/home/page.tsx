@@ -7,7 +7,7 @@ export default async function Home() {
   const firstName = user.fullName.trim().split(/\s+/)[0];
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-8 px-8 text-center">
+    <main className="flex flex-1 flex-col items-center justify-center gap-8 px-8 py-10 text-center">
       <ComingSoon firstName={firstName} />
       <SignOutButton />
     </main>

@@ -5,6 +5,7 @@ import type {
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
+  TextareaHTMLAttributes,
 } from "react";
 import { Icon, type IconName } from "@/components/ui/icons";
 
@@ -14,6 +15,8 @@ type FieldShellProps = {
   error?: string;
   hint?: string;
   className?: string;
+  /** grows to fit a textarea instead of the single-line height */
+  multiline?: boolean;
   children: ReactNode;
 };
 
@@ -23,6 +26,7 @@ function FieldShell({
   error,
   hint,
   className = "",
+  multiline = false,
   children,
 }: FieldShellProps) {
   const message = error ?? hint;
@@ -35,7 +39,7 @@ function FieldShell({
         {label}
       </label>
       <div
-        className={`flex h-12 items-center gap-2.5 rounded-xl border bg-white px-3.5 transition-[border-color,box-shadow] focus-within:ring-3 ${
+        className={`flex gap-2.5 rounded-xl ${multiline ? "items-start py-3" : "h-12 items-center"} border bg-white px-3.5 transition-[border-color,box-shadow] focus-within:ring-3 ${
           error
             ? "border-red-500 focus-within:ring-red-500/15"
             : "border-foreground/12 focus-within:border-accent focus-within:ring-accent/15"
@@ -112,6 +116,30 @@ export function TextField({
           <Icon name={revealed ? "eye-off" : "eye"} className="size-[18px]" />
         </button>
       )}
+    </FieldShell>
+  );
+}
+
+type TextAreaFieldProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "name"> & {
+  name: string;
+  label: string;
+  error?: string;
+  hint?: string;
+};
+
+export function TextAreaField({ label, error, hint, id, className, ...props }: TextAreaFieldProps) {
+  const autoId = useId();
+  const inputId = id ?? autoId;
+
+  return (
+    <FieldShell id={inputId} label={label} error={error} hint={hint} className={className} multiline>
+      <textarea
+        id={inputId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? `${inputId}-message` : undefined}
+        className="min-h-24 w-full min-w-0 flex-1 resize-y bg-transparent text-base leading-relaxed text-foreground outline-none placeholder:text-foreground/35"
+        {...props}
+      />
     </FieldShell>
   );
 }

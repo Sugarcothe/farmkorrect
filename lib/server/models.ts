@@ -1,5 +1,6 @@
-import type { ObjectId } from "mongodb";
+import type { Binary, ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
+import type { CredentialStatus } from "@/lib/profile/types";
 
 // Shapes of the documents persisted in MongoDB. Nothing here is ever sent to
 // the browser as-is; see the public types in lib/auth/types.ts.
@@ -11,6 +12,7 @@ export const COLLECTIONS = {
   passwordResets: "password_resets",
   farms: "farms",
   rateLimits: "rate_limits",
+  profilePhotos: "profile_photos",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -30,8 +32,33 @@ export type UserDoc = {
   emailVerifiedAt: Date | null;
   /** pending accounts are removed by a TTL index if never verified */
   pendingExpiresAt?: Date;
+  /** set the first time the user edits their profile; absent until then */
+  profile?: UserProfileDoc;
   createdAt: Date;
   updatedAt: Date;
+};
+
+/**
+ * Self-described profile details. Farmers' farm details live in the farms
+ * collection; the photo itself lives in profile_photos.
+ */
+export type UserProfileDoc = {
+  bio?: string;
+  /** professionals: where they practise */
+  location?: string;
+  /** professionals: years in practice */
+  yearsOfExperience?: number;
+  specialization?: string;
+  qualifications?: string;
+  registrationNumber?: string;
+  /**
+   * Only ever "pending" from the app; "verified" or "rejected" is set by a
+   * reviewer outside the profile API.
+   */
+  credentialStatus?: CredentialStatus;
+  credentialSubmittedAt?: Date;
+  /** when the current photo was saved; versions the photo URL */
+  photoUpdatedAt?: Date;
 };
 
 /**
@@ -99,6 +126,18 @@ export type FarmDoc = {
   birdCount: number;
   yearsOfExperience: number;
   createdAt: Date;
+  updatedAt: Date;
+};
+
+/** One re-encoded avatar per user, kept out of the user document. */
+export type ProfilePhotoDoc = {
+  /** the owner's user id */
+  _id: ObjectId;
+  data: Binary;
+  contentType: "image/webp";
+  size: number;
+  width: number;
+  height: number;
   updatedAt: Date;
 };
 

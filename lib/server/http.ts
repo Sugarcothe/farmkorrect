@@ -91,20 +91,18 @@ export function assertSameOrigin(request: Request) {
   }
 }
 
-/** Reads a JSON object body, rejecting other content types and oversized bodies. */
-export async function readJsonBody(
+/**
+ * Reads the whole body, refusing anything over maxBytes. The Content-Length
+ * header can be absent or wrong, so the bytes actually received are counted.
+ */
+export async function readLimitedBody(
   request: Request,
-  maxBytes = MAX_JSON_BYTES,
-): Promise<Record<string, unknown>> {
-  const type = request.headers.get("content-type") ?? "";
-  if (!/^application\/json\s*(;|$)/i.test(type))
-    throw new HttpError(415, "Requests must be sent as JSON.");
-
+  maxBytes: number,
+  tooLargeMessage: string,
+): Promise<Buffer> {
   const declared = Number(request.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes)
-    throw new HttpError(413, "This request is too large.");
+  if (Number.isFinite(declared) && declared > maxBytes) throw new HttpError(413, tooLargeMessage);
 
-  // the header can be absent or wrong, so count the bytes actually received
   const reader = request.body?.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -115,15 +113,28 @@ export async function readJsonBody(
       size += value.byteLength;
       if (size > maxBytes) {
         await reader.cancel().catch(() => {});
-        throw new HttpError(413, "This request is too large.");
+        throw new HttpError(413, tooLargeMessage);
       }
       chunks.push(value);
     }
   }
+  return Buffer.concat(chunks);
+}
+
+/** Reads a JSON object body, rejecting other content types and oversized bodies. */
+export async function readJsonBody(
+  request: Request,
+  maxBytes = MAX_JSON_BYTES,
+): Promise<Record<string, unknown>> {
+  const type = request.headers.get("content-type") ?? "";
+  if (!/^application\/json\s*(;|$)/i.test(type))
+    throw new HttpError(415, "Requests must be sent as JSON.");
+
+  const raw = await readLimitedBody(request, maxBytes, "This request is too large.");
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    parsed = JSON.parse(raw.toString("utf8"));
   } catch {
     throw new HttpError(400, "The request couldn't be read. Please try again.");
   }

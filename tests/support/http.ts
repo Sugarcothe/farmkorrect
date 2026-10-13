@@ -7,6 +7,8 @@ type Handler = (request: Request) => Promise<Response>;
 export type CallOptions = {
   body?: unknown;
   rawBody?: string;
+  /** raw bytes, e.g. an image upload */
+  binaryBody?: Uint8Array;
   cookie?: string | null;
   /** null omits the Origin header */
   origin?: string | null;
@@ -32,7 +34,10 @@ export async function call<T = unknown>(
   options: CallOptions = {},
 ): Promise<CallResult<T>> {
   const method =
-    options.method ?? (options.body !== undefined || options.rawBody !== undefined ? "POST" : "GET");
+    options.method ??
+    (options.body !== undefined || options.rawBody !== undefined || options.binaryBody !== undefined
+      ? "POST"
+      : "GET");
   const headers = new Headers();
   if (options.origin !== null) headers.set("origin", options.origin ?? ORIGIN);
   if (method !== "GET" && options.contentType !== null)
@@ -43,7 +48,12 @@ export async function call<T = unknown>(
   const request = new Request(`${ORIGIN}${path}`, {
     method,
     headers,
-    body: method === "GET" ? undefined : (options.rawBody ?? JSON.stringify(options.body ?? {})),
+    body:
+      method === "GET"
+        ? undefined
+        : options.binaryBody
+          ? new Uint8Array(options.binaryBody) // a copy backed by a plain ArrayBuffer
+          : (options.rawBody ?? JSON.stringify(options.body ?? {})),
   });
   const response = await handler(request);
   const setCookie = response.headers.get("set-cookie");
