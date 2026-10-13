@@ -78,7 +78,7 @@ export default function Verify() {
   }
 
   return (
-    <AuthScreen backHref="/auth/sign-up" topBar="OTP Verification">
+    <AuthScreen centered backHref="/auth/sign-up" topBar="OTP Verification">
       <div className="mt-4">
         <IconBadge icon="shield-check" />
       </div>

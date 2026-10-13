@@ -157,7 +157,7 @@ export default function SignUp() {
               I agree to the{" "}
               <strong className="text-foreground">Terms of Service</strong> and{" "}
               <strong className="text-foreground">Privacy Policy</strong> of
-              Farm Korect.
+              Farm Korret.
             </span>
           </label>
           {form.errors.acceptedTerms && (

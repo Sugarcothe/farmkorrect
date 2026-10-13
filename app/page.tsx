@@ -38,10 +38,10 @@ export default function Splash() {
       <div className="animate-fade-up flex flex-col items-center text-center">
         {/* the logo artwork has its own white margin, so it fills the tile */}
         <div className="relative size-28 overflow-hidden rounded-[1.75rem] bg-white shadow-xl shadow-black/25">
-          <Image src="/fk-logo.png" alt="" fill sizes="112px" preload />
+          <Image src="/farm-korret-logo.png" alt="" fill sizes="112px" preload />
         </div>
         <h1 className="mt-5 text-3xl font-extrabold tracking-tight text-white">
-          Farm Korect
+          Farm Korret
         </h1>
         <p className="mt-1.5 text-sm font-medium text-white/70">
           Everything poultry, one app

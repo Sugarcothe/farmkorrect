@@ -26,7 +26,7 @@ function codeHash(challengeId: ObjectId, code: string) {
 }
 
 export function otpMessage(code: string) {
-  return `Your Farm Korect Nig verification code is ${code}. It expires in 5 minutes. Never share this code with anyone.`;
+  return `Your Farm Korret Nig verification code is ${code}. It expires in 5 minutes. Never share this code with anyone.`;
 }
 
 export type IssueResult =

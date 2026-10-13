@@ -60,7 +60,7 @@ export default function ResetPassword() {
   });
 
   return (
-    <AuthScreen backHref="/auth/sign-in" topBar="Reset Password">
+    <AuthScreen centered backHref="/auth/sign-in" topBar="Reset Password">
       <div className="mt-4">
         <IconBadge icon="lock" />
       </div>

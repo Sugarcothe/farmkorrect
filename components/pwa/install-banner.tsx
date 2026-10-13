@@ -110,7 +110,7 @@ export function InstallBanner() {
       <div aria-hidden="true" style={{ height }} className="shrink-0" />
       <aside
         ref={bannerRef}
-        aria-label="Install Farm Korect Nig"
+        aria-label="Install Farm Korret Nig"
         onKeyDown={(e) => {
           if (e.key === "Escape" && iosHelp) setIosHelp(false);
         }}
@@ -125,7 +125,7 @@ export function InstallBanner() {
                   tabIndex={-1}
                   className="flex-1 pt-0.5 text-sm font-bold text-foreground outline-none"
                 >
-                  Add Farm Korect Nig to your Home Screen
+                  Add Farm Korret Nig to your Home Screen
                 </h2>
                 <CloseButton
                   label="Close instructions"
@@ -169,11 +169,11 @@ export function InstallBanner() {
           ) : (
             <div className="flex items-start gap-3">
               <span className="relative size-12 shrink-0 overflow-hidden rounded-xl border border-foreground/10 bg-white">
-                <Image src="/fk-logo.png" alt="" fill sizes="48px" />
+                <Image src="/farm-korret-logo.png" alt="" fill sizes="48px" />
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-bold text-foreground">
-                  Farm Korect Nig
+                  Farm Korret Nig
                 </p>
                 <p className="mt-0.5 text-xs leading-snug text-muted-foreground">
                   Install our app for quick access to your poultry farm tools.

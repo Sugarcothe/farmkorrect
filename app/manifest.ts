@@ -3,10 +3,10 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Farm Korect Nig",
-    short_name: "Farm Korect",
+    name: "Farm Korret Nig",
+    short_name: "Farm Korret",
     description:
-      "Farm Korect Nig — the poultry farming and agricultural marketplace for Nigerian farmers.",
+      "Farm Korret Nig — the poultry farming and agricultural marketplace for Nigerian farmers.",
     // the splash screen, which routes to onboarding, sign-in or home itself
     start_url: "/",
     scope: "/",

@@ -8,7 +8,7 @@ import type { ApiResult } from "@/lib/auth/types";
 export function notImplemented(action: string) {
   const body: ApiResult = {
     ok: false,
-    error: `${action} isn't available yet — the Farm Korrect server hasn't been connected. Please try again later.`,
+    error: `${action} isn't available yet — the Farm Korret server hasn't been connected. Please try again later.`,
   };
   return Response.json(body, { status: 501 });
 }

@@ -2,11 +2,11 @@
 // share image. Nothing secret belongs here.
 
 export const SITE = {
-  name: "Farm Korect Nig",
-  shortName: "Farm Korect",
+  name: "Farm Korret Nig",
+  shortName: "Farm Korret",
   tagline: "Everything poultry, one app",
   description:
-    "Farm Korect Nig — the poultry farming and agricultural marketplace for Nigerian farmers. Find vets, buy feed and vaccines, learn, and track your farm's finances.",
+    "Farm Korret Nig — the poultry farming and agricultural marketplace for Nigerian farmers. Find vets, buy feed and vaccines, learn, and track your farm's finances.",
   themeColor: "#004b2e",
 } as const;
 

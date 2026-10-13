@@ -61,7 +61,7 @@ export default function SignIn() {
   });
 
   return (
-    <AuthScreen backHref="/onboarding">
+    <AuthScreen centered backHref="/onboarding">
       <BrandMark />
       <ScreenHeading title="Welcome Back">
         Enter details below to access your poultry dashboard.

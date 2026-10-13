@@ -47,7 +47,7 @@ export default function ChooseRole() {
         Choose Your Role
       </h1>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-        Select how you want to interact with the Farm Korect poultry
+        Select how you want to interact with the Farm Korret poultry
         ecosystem. This customizes your dashboard.
       </p>
 

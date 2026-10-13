@@ -49,7 +49,7 @@ export function parseRegistration(body: Record<string, unknown>): RegistrationIn
   const password = str(body, "password");
 
   throwIfErrors({
-    role: (ROLES as readonly string[]).includes(role) ? undefined : "Choose how you'll use Farm Korect Nig.",
+    role: (ROLES as readonly string[]).includes(role) ? undefined : "Choose how you'll use Farm Korret Nig.",
     fullName:
       validateFullName(fullName) ??
       (fullName.length > FIELD_MAX_LENGTH.fullName ? "Enter a shorter name." : undefined),
