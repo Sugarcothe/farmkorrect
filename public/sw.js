@@ -1,11 +1,11 @@
 // bump when precached files change so old copies (e.g. icons) are dropped
-const CACHE_NAME = "farm-korrect-v3";
+const CACHE_NAME = "farm-korrect-v4";
 const OFFLINE_URL = "/";
 
 const PRECACHE_URLS = [
   OFFLINE_URL,
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
+  "/icons/icon-192-v2.png",
+  "/icons/icon-512-v2.png",
 ];
 
 self.addEventListener("install", (event) => {

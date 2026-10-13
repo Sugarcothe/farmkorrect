@@ -13,7 +13,7 @@ export const contentType = "image/png";
 const features = ["Find Vets", "Explore Market", "Start Training", "Track Finances"];
 
 export default async function OpenGraphImage() {
-  const logo = await readFile(join(process.cwd(), "public/icons/icon-512.png"));
+  const logo = await readFile(join(process.cwd(), "public/icons/icon-512-v2.png"));
   const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   return new ImageResponse(
