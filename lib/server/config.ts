@@ -109,6 +109,33 @@ export function getFixedOtpCode(): string | null {
   return code;
 }
 
+export type CloudinaryConfig = { cloudName: string; apiKey: string; apiSecret: string; folder: string };
+
+/**
+ * null when image uploads haven't been configured. Takes either the
+ * dashboard's CLOUDINARY_URL (cloudinary://key:secret@cloud) or the three
+ * separate variables.
+ */
+export function getCloudinaryConfig(): CloudinaryConfig | null {
+  let cloudName = read("CLOUDINARY_CLOUD_NAME");
+  let apiKey = read("CLOUDINARY_API_KEY");
+  let apiSecret = read("CLOUDINARY_API_SECRET");
+  const url = read("CLOUDINARY_URL");
+  if (url) {
+    const match = url.match(/^cloudinary:\/\/([^:@/]+):([^@/]+)@([^/?#]+)$/);
+    if (!match) throw new ConfigError("CLOUDINARY_URL must look like cloudinary://<key>:<secret>@<cloud name>.");
+    [, apiKey, apiSecret, cloudName] = match;
+  }
+  if (!cloudName || !apiKey || !apiSecret) return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(cloudName))
+    throw new ConfigError("CLOUDINARY_CLOUD_NAME may only contain letters, digits, _ and -.");
+
+  const folder = (read("CLOUDINARY_FOLDER") ?? "farm-korret/avatars").replace(/^\/+|\/+$/g, "");
+  if (!/^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*$/.test(folder))
+    throw new ConfigError("CLOUDINARY_FOLDER may only contain letters, digits, _, - and /.");
+  return { cloudName, apiKey, apiSecret, folder };
+}
+
 /** null when email delivery hasn't been configured */
 export function getResendConfig(): ResendConfig | null {
   const apiKey = read("RESEND_API_KEY");

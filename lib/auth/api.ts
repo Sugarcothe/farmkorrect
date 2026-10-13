@@ -19,7 +19,7 @@ import type {
 
 const UNREACHABLE = "Can't reach the server. Check your connection and try again.";
 
-async function request<T>(path: string, init: RequestInit): Promise<ApiResult<T>> {
+export async function request<T>(path: string, init: RequestInit): Promise<ApiResult<T>> {
   let res: Response;
   try {
     res = await fetch(path, { credentials: "same-origin", cache: "no-store", ...init });

@@ -12,6 +12,16 @@ import {
   validatePhone,
 } from "@/lib/auth/validation";
 import { FARM_TYPES, ROLES, type FarmType, type Role } from "@/lib/auth/types";
+import { PROFILE_CONFIG } from "@/lib/profile/config";
+import type { ProfileField } from "@/lib/profile/types";
+import {
+  cleanText,
+  validateBio,
+  validatePracticeLocation,
+  validateQualifications,
+  validateRegistrationNumber,
+  validateSpecialization,
+} from "@/lib/profile/validation";
 import { HttpError, str } from "./http";
 import { MAX_PASSWORD_LENGTH } from "./passwords";
 
@@ -157,4 +167,102 @@ export function parseFarm(body: Record<string, unknown>): FarmInput {
     birdCount: body.birdCount as number,
     yearsOfExperience: body.yearsOfExperience as number,
   };
+}
+
+export type ProfileUpdate = {
+  fullName?: string;
+  bio?: string;
+  location?: string;
+  yearsOfExperience?: number;
+  farmName?: string;
+  farmType?: FarmType;
+  birdCount?: number;
+  specialization?: string;
+  qualifications?: string;
+  registrationNumber?: string;
+};
+
+const NUMBER_FIELDS = new Set<ProfileField>(["yearsOfExperience", "birdCount"]);
+
+/**
+ * A profile edit: any subset of the fields the account's role may change.
+ * The role comes from the stored account, never the body. Every other key —
+ * role, email, phone, status, verification flags, credential status, ids —
+ * is refused rather than silently ignored, so nothing protected can be set
+ * through this endpoint.
+ */
+export function parseProfileUpdate(role: Role, body: Record<string, unknown>): ProfileUpdate {
+  const allowed = new Set<string>(PROFILE_CONFIG[role].editableFields);
+  const refused = Object.keys(body).filter((key) => !allowed.has(key));
+  if (refused.length > 0) {
+    // fromEntries defines own properties, so even a "__proto__" key is reported
+    const fieldErrors = Object.fromEntries(
+      refused.map((key) => [key, "This can't be changed from your profile."]),
+    ) as Record<string, string>;
+    throw new HttpError(400, "Some of these details can't be changed from your profile.", fieldErrors);
+  }
+
+  const keys = Object.keys(body) as ProfileField[];
+  if (keys.length === 0) throw new HttpError(400, "There are no changes to save.");
+
+  const typeErrors: Record<string, string | undefined> = {};
+  for (const key of keys) {
+    const expected = NUMBER_FIELDS.has(key) ? "number" : "string";
+    if (typeof body[key] !== expected)
+      typeErrors[key] = expected === "number" ? "Enter a whole number." : "Enter text.";
+  }
+  throwIfErrors(typeErrors);
+
+  const text = (key: ProfileField, multiline = false) => cleanText(body[key] as string, multiline);
+  const has = (key: ProfileField) => keys.includes(key);
+  const isFarmer = role === "poultry-farmer";
+  const update: ProfileUpdate = {};
+  const errors: Record<string, string | undefined> = {};
+
+  if (has("fullName")) {
+    update.fullName = text("fullName");
+    errors.fullName =
+      validateFullName(update.fullName) ??
+      (update.fullName.length > FIELD_MAX_LENGTH.fullName ? "Enter a shorter name." : undefined);
+  }
+  if (has("bio")) {
+    update.bio = text("bio", true);
+    errors.bio = validateBio(update.bio);
+  }
+  if (has("location")) {
+    update.location = text("location");
+    errors.location = isFarmer ? validateLocation(update.location) : validatePracticeLocation(update.location);
+  }
+  if (has("yearsOfExperience")) {
+    update.yearsOfExperience = body.yearsOfExperience as number;
+    errors.yearsOfExperience = wholeNumberError(body.yearsOfExperience, FARM_LIMITS.yearsOfExperience);
+  }
+  if (has("farmName")) {
+    update.farmName = text("farmName");
+    errors.farmName = validateFarmName(update.farmName);
+  }
+  if (has("farmType")) {
+    const farmType = body.farmType as string;
+    errors.farmType = (FARM_TYPES as readonly string[]).includes(farmType) ? undefined : "Choose your farm type.";
+    update.farmType = farmType as FarmType;
+  }
+  if (has("birdCount")) {
+    update.birdCount = body.birdCount as number;
+    errors.birdCount = wholeNumberError(body.birdCount, FARM_LIMITS.birdCount);
+  }
+  if (has("specialization")) {
+    update.specialization = body.specialization as string;
+    errors.specialization = validateSpecialization(role, update.specialization);
+  }
+  if (has("qualifications")) {
+    update.qualifications = text("qualifications");
+    errors.qualifications = validateQualifications(update.qualifications);
+  }
+  if (has("registrationNumber")) {
+    update.registrationNumber = text("registrationNumber").toUpperCase();
+    errors.registrationNumber = validateRegistrationNumber(update.registrationNumber);
+  }
+
+  throwIfErrors(errors);
+  return update;
 }

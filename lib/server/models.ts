@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
+import type { CredentialStatus } from "@/lib/profile/types";
 
 // Shapes of the documents persisted in MongoDB. Nothing here is ever sent to
 // the browser as-is; see the public types in lib/auth/types.ts.
@@ -30,8 +31,32 @@ export type UserDoc = {
   emailVerifiedAt: Date | null;
   /** pending accounts are removed by a TTL index if never verified */
   pendingExpiresAt?: Date;
+  /** set the first time the user edits their profile; absent until then */
+  profile?: UserProfileDoc;
   createdAt: Date;
   updatedAt: Date;
+};
+
+/**
+ * Self-described profile details. Farmers' farm details live in the farms
+ * collection; the photo file itself is stored on Cloudinary.
+ */
+export type UserProfileDoc = {
+  bio?: string;
+  /** professionals: where they practise */
+  location?: string;
+  /** professionals: years in practice */
+  yearsOfExperience?: number;
+  specialization?: string;
+  qualifications?: string;
+  registrationNumber?: string;
+  /**
+   * Only ever "pending" from the app; "verified" or "rejected" is set by a
+   * reviewer outside the profile API.
+   */
+  credentialStatus?: CredentialStatus;
+  credentialSubmittedAt?: Date;
+  photo?: ProfilePhotoRef;
 };
 
 /**
@@ -99,6 +124,17 @@ export type FarmDoc = {
   birdCount: number;
   yearsOfExperience: number;
   createdAt: Date;
+  updatedAt: Date;
+};
+
+/** Where the current avatar is stored: a re-encoded WebP on Cloudinary. */
+export type ProfilePhotoRef = {
+  /** Cloudinary public id, used to delete the file once it's replaced */
+  publicId: string;
+  /** https delivery URL */
+  url: string;
+  width: number;
+  height: number;
   updatedAt: Date;
 };
 

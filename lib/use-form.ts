@@ -40,7 +40,7 @@ export function useForm<T extends Values>(
       value: String(values[name]),
       error: visibleErrors[name],
       onChange: (
-        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
       ) => setValue(name, e.target.value as T[typeof name]),
       onBlur: () => setTouched((prev) => ({ ...prev, [name]: true })),
     };

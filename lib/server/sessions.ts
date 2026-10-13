@@ -3,7 +3,7 @@ import { ObjectId, type ClientSession } from "mongodb";
 import { getAuthConfig } from "./config";
 import { hashToken, randomToken } from "./crypto";
 import { getDb } from "./db";
-import { readCookie } from "./http";
+import { HttpError, readCookie } from "./http";
 import { COLLECTIONS, type SessionDoc, type SessionKind, type UserDoc } from "./models";
 
 // Opaque, database-backed sessions. The browser holds a random 256-bit token
@@ -95,4 +95,15 @@ export async function revokeUserSessions(userId: ObjectId, dbSession?: ClientSes
   await (await getDb())
     .collection<SessionDoc>(COLLECTIONS.sessions)
     .updateMany({ userId, revokedAt: null }, { $set: { revokedAt: new Date() } }, { session: dbSession });
+}
+
+/**
+ * For route handlers acting on the caller's own account: the verified,
+ * signed-in session, or a 401/403.
+ */
+export async function requireVerifiedRequest(request: Request, unverifiedMessage: string): Promise<ActiveSession> {
+  const active = await getRequestSession(request);
+  if (!active) throw new HttpError(401, "Your session has ended. Please log in again.");
+  if (!isFullyAuthenticated(active)) throw new HttpError(403, unverifiedMessage);
+  return active;
 }
