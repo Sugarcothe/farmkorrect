@@ -43,6 +43,10 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { ownerUserId: 1, createdAt: -1 }, name: "owner_recent" },
     { key: { farmType: 1 }, name: "farm_type" },
   ],
+  [COLLECTIONS.services]: [
+    // an owner's current services, newest first
+    { key: { ownerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "owner_current" },
+  ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
   ],

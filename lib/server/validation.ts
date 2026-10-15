@@ -22,6 +22,14 @@ import {
   validateRegistrationNumber,
   validateSpecialization,
 } from "@/lib/profile/validation";
+import type { ServiceFields } from "@/lib/services/types";
+import {
+  validateDurationMinutes,
+  validatePriceNgn,
+  validateServiceCategory,
+  validateServiceDescription,
+  validateServiceName,
+} from "@/lib/services/validation";
 import { HttpError, str } from "./http";
 import { MAX_PASSWORD_LENGTH } from "./passwords";
 
@@ -265,4 +273,113 @@ export function parseProfileUpdate(role: Role, body: Record<string, unknown>): P
 
   throwIfErrors(errors);
   return update;
+}
+
+const SERVICE_FIELD_TYPES = {
+  name: "text",
+  category: "text",
+  description: "text",
+  priceNgn: "number",
+  durationMinutes: "duration",
+  active: "boolean",
+  bookingAvailable: "boolean",
+} as const satisfies Record<keyof ServiceFields, string>;
+
+const SERVICE_TYPE_ERRORS = {
+  text: "Enter text.",
+  number: "Enter the price as a number.",
+  duration: "Choose one of the listed durations.",
+  boolean: "Choose on or off.",
+} as const;
+
+function isServiceField(key: string): key is keyof ServiceFields {
+  return Object.hasOwn(SERVICE_FIELD_TYPES, key);
+}
+
+/**
+ * The service fields present in a body, type-checked and with text cleaned.
+ * Any other key — ownerUserId, _id, archivedAt, timestamps, bookable — is
+ * refused rather than silently ignored, so ownership and bookkeeping can
+ * never be set through the API.
+ */
+function readServiceFields(body: Record<string, unknown>): Partial<ServiceFields> {
+  const refused = Object.keys(body).filter((key) => !isServiceField(key));
+  if (refused.length > 0) {
+    const fieldErrors = Object.fromEntries(
+      refused.map((key) => [key, "This can't be set on a service."]),
+    ) as Record<string, string>;
+    throw new HttpError(400, "Some of these details can't be set on a service.", fieldErrors);
+  }
+
+  const typeErrors: Record<string, string | undefined> = {};
+  for (const key of Object.keys(body) as Array<keyof ServiceFields>) {
+    const kind = SERVICE_FIELD_TYPES[key];
+    const value = body[key];
+    const valid =
+      kind === "text"
+        ? typeof value === "string"
+        : kind === "number"
+          ? typeof value === "number"
+          : kind === "duration"
+            ? value === null || typeof value === "number"
+            : typeof value === "boolean";
+    if (!valid) typeErrors[key] = SERVICE_TYPE_ERRORS[kind];
+  }
+  throwIfErrors(typeErrors);
+
+  const fields = { ...body } as Partial<ServiceFields>;
+  if (fields.name !== undefined) fields.name = cleanText(fields.name);
+  if (fields.description !== undefined) fields.description = cleanText(fields.description, true);
+  return fields;
+}
+
+/** A new service. Text, category, price and duration are required. */
+export function parseNewService(role: Role, body: Record<string, unknown>): ServiceFields {
+  const fields = readServiceFields(body);
+  const category = fields.category ?? "";
+  throwIfErrors({
+    name: validateServiceName(fields.name ?? ""),
+    category: validateServiceCategory(role, category),
+    description: validateServiceDescription(fields.description ?? ""),
+    priceNgn:
+      fields.priceNgn === undefined ? "Enter a price in naira." : validatePriceNgn(role, fields.priceNgn, category),
+    durationMinutes:
+      fields.durationMinutes === undefined ? "Choose a duration." : validateDurationMinutes(fields.durationMinutes),
+  });
+  return {
+    name: fields.name!,
+    category,
+    description: fields.description!,
+    priceNgn: fields.priceNgn!,
+    durationMinutes: fields.durationMinutes!,
+    active: fields.active ?? true,
+    bookingAvailable: fields.bookingAvailable ?? true,
+  };
+}
+
+/**
+ * Changes to an existing service: any subset of its editable fields. Only
+ * what changes is validated, except that a new price or category is checked
+ * against the other (some categories can't be free).
+ */
+export function parseServiceUpdate(
+  role: Role,
+  body: Record<string, unknown>,
+  current: Pick<ServiceFields, "category" | "priceNgn">,
+): Partial<ServiceFields> {
+  const fields = readServiceFields(body);
+  if (Object.keys(fields).length === 0) throw new HttpError(400, "There are no changes to save.");
+
+  const priceChecked = fields.priceNgn !== undefined || fields.category !== undefined;
+  throwIfErrors({
+    name: fields.name === undefined ? undefined : validateServiceName(fields.name),
+    category: fields.category === undefined ? undefined : validateServiceCategory(role, fields.category),
+    description: fields.description === undefined ? undefined : validateServiceDescription(fields.description),
+    priceNgn: priceChecked
+      ? validatePriceNgn(role, fields.priceNgn ?? current.priceNgn, fields.category ?? current.category)
+      : undefined,
+    durationMinutes:
+      fields.durationMinutes === undefined ? undefined : validateDurationMinutes(fields.durationMinutes),
+  });
+  return fields;
 }
