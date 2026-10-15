@@ -49,17 +49,26 @@ export function tooManyRequests(retryAfterSeconds: number, message?: string): Ht
 }
 
 /**
- * Wraps a route handler: HttpErrors become ApiResult responses, and anything
+ * Wraps a route handler (and passes on its context, e.g. dynamic params):
+ * HttpErrors become ApiResult responses, and anything
  * else is logged by name/code only (never request bodies) and reported as a
  * generic failure.
  */
 export function route(
   name: string,
   handler: (request: Request) => Promise<Response>,
-): (request: Request) => Promise<Response> {
-  return async (request) => {
+): (request: Request) => Promise<Response>;
+export function route<Context>(
+  name: string,
+  handler: (request: Request, context: Context) => Promise<Response>,
+): (request: Request, context: Context) => Promise<Response>;
+export function route(
+  name: string,
+  handler: (request: Request, context?: unknown) => Promise<Response>,
+) {
+  return async (request: Request, context?: unknown) => {
     try {
-      return await handler(request);
+      return await handler(request, context);
     } catch (error) {
       if (error instanceof HttpError)
         return fail(error.status, error.publicMessage, error.fieldErrors, error.headers);

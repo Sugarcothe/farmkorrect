@@ -26,7 +26,10 @@ export const SPECIALIZATIONS: Record<Exclude<Role, "poultry-farmer">, readonly O
   ],
 };
 
-/** Profile sub-pages that aren't built yet; each shows an honest "coming soon". */
+/**
+ * Profile sub-pages. Those not marked `ready` aren't built yet and show an
+ * honest "coming soon"; ready ones have their own route.
+ */
 export type ProfileSection =
   | "reviews"
   | "services"
@@ -36,7 +39,7 @@ export type ProfileSection =
   | "certification"
   | "help";
 
-export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIcon; blurb: string }> = {
+export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIcon; blurb: string; ready?: true }> = {
   reviews: {
     title: "My Reviews",
     icon: "star",
@@ -45,7 +48,8 @@ export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIco
   services: {
     title: "Services & Pricing",
     icon: "list",
-    blurb: "You'll soon be able to list the services you offer and what you charge.",
+    blurb: "List the services you offer and what you charge.",
+    ready: true,
   },
   "bank-details": {
     title: "Bank Details",
@@ -140,7 +144,7 @@ export const PROFILE_CONFIG: Record<Role, RoleProfileConfig> = {
       "birdCount",
       "yearsOfExperience",
     ],
-    sections: ["notifications", "security", "help"],
+    sections: ["services", "notifications", "security", "help"],
     tabs: FARMER_TABS,
     hasCredential: false,
   },

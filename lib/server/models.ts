@@ -12,6 +12,7 @@ export const COLLECTIONS = {
   passwordResets: "password_resets",
   farms: "farms",
   rateLimits: "rate_limits",
+  services: "services",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -135,6 +136,30 @@ export type ProfilePhotoRef = {
   url: string;
   width: number;
   height: number;
+  updatedAt: Date;
+};
+
+/**
+ * A service a user offers under Services & Pricing. Only the owner's id is
+ * kept here; names, photos and other profile details stay on the user.
+ */
+export type ServiceDoc = {
+  _id: ObjectId;
+  ownerUserId: ObjectId;
+  name: string;
+  /** a value from SERVICE_CATEGORIES for the owner's role */
+  category: string;
+  description: string;
+  /** whole naira; 0 means free */
+  priceNgn: number;
+  /** null when the duration varies */
+  durationMinutes: number | null;
+  active: boolean;
+  /** only counts while the service is active */
+  bookingAvailable: boolean;
+  /** set when the owner removes the service; it's then hidden everywhere */
+  archivedAt: Date | null;
+  createdAt: Date;
   updatedAt: Date;
 };
 

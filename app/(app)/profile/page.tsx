@@ -89,7 +89,11 @@ export default async function ProfilePage({
           {config.sections.map((section) => (
             <li key={section}>
               <Link href={`/profile/${section}`} className={menuRowClass}>
-                <MenuRowContent icon={SECTION_INFO[section].icon} label={SECTION_INFO[section].title} soon />
+                <MenuRowContent
+                  icon={SECTION_INFO[section].icon}
+                  label={SECTION_INFO[section].title}
+                  soon={!SECTION_INFO[section].ready}
+                />
               </Link>
             </li>
           ))}
