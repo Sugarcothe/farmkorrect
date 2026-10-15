@@ -3,11 +3,14 @@ import { afterAll, beforeAll, beforeEach, vi } from "vitest";
 import { closeDb, getDb } from "@/lib/server/db";
 import { signParams } from "@/lib/server/cloudinary";
 import { ensureIndexes } from "@/lib/server/indexes";
+import { clearBankListCache } from "@/lib/server/paystack";
 import { outbox, resetOutbox } from "./outbox";
+import { fakePaystack, resetPaystack, TEST_PAYSTACK_KEY } from "./paystack";
 
 // Each test file gets a throwaway MongoDB replica set (transactions need one),
 // and every outbound HTTP request is intercepted: SMS and email requests are
-// captured in the outbox and nothing ever reaches Termii, Resend or Cloudinary.
+// captured in the outbox and nothing ever reaches Termii, Resend, Cloudinary
+// or Paystack.
 
 vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
@@ -33,6 +36,7 @@ const TEST_ENV: Record<string, string> = {
   CLOUDINARY_API_SECRET: "test-cloudinary-secret",
   CLOUDINARY_FOLDER: "",
   TRUST_PROXY_HEADERS: "true",
+  PAYSTACK_SECRET_KEY: TEST_PAYSTACK_KEY,
 };
 
 let replSet: MongoMemoryReplSet;
@@ -80,6 +84,7 @@ async function fakeCloudinary(action: string, form: FormData) {
 
 async function fakeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = input instanceof Request ? input.url : String(input);
+  if (url.startsWith("https://api.paystack.co/")) return fakePaystack(new URL(url), init);
   if (url.startsWith(CLOUDINARY_API)) return fakeCloudinary(url.slice(CLOUDINARY_API.length), init!.body as FormData);
   const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
   if (url === "https://termii.invalid/api/sms/send") {
@@ -104,6 +109,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   stubTestEnv();
   resetOutbox();
+  resetPaystack();
+  clearBankListCache();
   vi.stubGlobal("fetch", fakeFetch);
   vi.spyOn(console, "error").mockImplementation(() => {});
 

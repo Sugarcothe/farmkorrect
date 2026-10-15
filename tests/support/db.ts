@@ -1,8 +1,10 @@
 import { getDb } from "@/lib/server/db";
 import {
+  type BankVerificationDoc,
   COLLECTIONS,
   type FarmDoc,
   type OtpChallengeDoc,
+  type PayoutAccountDoc,
   type PasswordResetDoc,
   type ServiceDoc,
   type SessionDoc,
@@ -19,6 +21,8 @@ export async function collections() {
     resets: db.collection<PasswordResetDoc>(COLLECTIONS.passwordResets),
     farms: db.collection<FarmDoc>(COLLECTIONS.farms),
     services: db.collection<ServiceDoc>(COLLECTIONS.services),
+    payoutAccounts: db.collection<PayoutAccountDoc>(COLLECTIONS.payoutAccounts),
+    bankVerifications: db.collection<BankVerificationDoc>(COLLECTIONS.bankVerifications),
   };
 }
 

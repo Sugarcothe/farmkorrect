@@ -136,6 +136,20 @@ export function getCloudinaryConfig(): CloudinaryConfig | null {
   return { cloudName, apiKey, apiSecret, folder };
 }
 
+export type PaystackConfig = { secretKey: string; mode: "test" | "live" };
+
+/**
+ * null when bank verification hasn't been configured. Server-only: the key
+ * signs every Paystack request and must never reach the browser.
+ */
+export function getPaystackConfig(): PaystackConfig | null {
+  const secretKey = read("PAYSTACK_SECRET_KEY");
+  if (!secretKey) return null;
+  const match = secretKey.match(/^sk_(test|live)_[A-Za-z0-9]+$/);
+  if (!match) throw new ConfigError("PAYSTACK_SECRET_KEY must be a Paystack secret key (sk_test_… or sk_live_…).");
+  return { secretKey, mode: match[1] as "test" | "live" };
+}
+
 /** null when email delivery hasn't been configured */
 export function getResendConfig(): ResendConfig | null {
   const apiKey = read("RESEND_API_KEY");

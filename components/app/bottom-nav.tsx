@@ -6,7 +6,11 @@ import { Icon } from "@/components/ui/icons";
 import type { NavTab } from "@/lib/profile/config";
 
 /** Hidden on full-screen forms, which have their own Cancel/Save actions. */
-const HIDDEN_ON = [/^\/profile\/edit(\/|$)/, /^\/profile\/services\/(new|[^/]+\/edit)\/?$/];
+const HIDDEN_ON = [
+  /^\/profile\/edit(\/|$)/,
+  /^\/profile\/services\/(new|[^/]+\/edit)\/?$/,
+  /^\/profile\/bank-details\/setup\/?$/,
+];
 
 export function BottomNav({ tabs }: { tabs: readonly NavTab[] }) {
   const pathname = usePathname();
