@@ -24,6 +24,8 @@ export const LIMITS = {
   resetAttemptsPerIp: { limit: 20, windowMs: 15 * 60_000 },
   photoUploadsPerUser: { limit: 20, windowMs: 60 * 60_000 },
   serviceChangesPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  bankResolvesPerUser: { limit: 10, windowMs: 60 * 60_000 },
+  bankAccountSavesPerUser: { limit: 10, windowMs: 60 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

@@ -54,7 +54,8 @@ export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIco
   "bank-details": {
     title: "Bank Details",
     icon: "landmark",
-    blurb: "Payout account setup is coming with earnings. We don't collect bank details yet.",
+    blurb: "Add the bank account your earnings will be paid into, verified with Paystack.",
+    ready: true,
   },
   notifications: {
     title: "Notifications",
@@ -144,7 +145,7 @@ export const PROFILE_CONFIG: Record<Role, RoleProfileConfig> = {
       "birdCount",
       "yearsOfExperience",
     ],
-    sections: ["services", "notifications", "security", "help"],
+    sections: ["services", "bank-details", "notifications", "security", "help"],
     tabs: FARMER_TABS,
     hasCredential: false,
   },

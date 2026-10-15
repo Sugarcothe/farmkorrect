@@ -47,6 +47,28 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // an owner's current services, newest first
     { key: { ownerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "owner_current" },
   ],
+  [COLLECTIONS.payoutAccounts]: [
+    // one account per owner receives payouts
+    {
+      key: { ownerUserId: 1 },
+      name: "one_current_per_owner",
+      unique: true,
+      partialFilterExpression: { current: true },
+    },
+    { key: { ownerUserId: 1, createdAt: -1 }, name: "owner_history" },
+  ],
+  [COLLECTIONS.bankVerifications]: [
+    { key: { tokenHash: 1 }, name: "token_unique", unique: true },
+    // at most one confirmable check per user
+    {
+      key: { userId: 1 },
+      name: "one_active_per_user",
+      unique: true,
+      partialFilterExpression: { active: true },
+    },
+    // gone an hour after expiry; they hold the account name, so not kept long
+    { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 3_600 },
+  ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
   ],
