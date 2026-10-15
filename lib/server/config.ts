@@ -150,6 +150,32 @@ export function getPaystackConfig(): PaystackConfig | null {
   return { secretKey, mode: match[1] as "test" | "live" };
 }
 
+/**
+ * Whether payouts may be sent as Paystack transfers. Off unless
+ * PAYSTACK_TRANSFERS_ENABLED is exactly "true" and a key is configured. A
+ * live key is refused outside production, so a local or preview deployment
+ * can never move real money by accident.
+ */
+export function getTransferConfig(): { enabled: boolean } {
+  if (read("PAYSTACK_TRANSFERS_ENABLED") !== "true") return { enabled: false };
+  const paystack = getPaystackConfig();
+  if (!paystack) throw new ConfigError("PAYSTACK_TRANSFERS_ENABLED needs PAYSTACK_SECRET_KEY.");
+  if (paystack.mode === "live" && process.env.NODE_ENV !== "production")
+    throw new ConfigError("A live Paystack key can only send transfers in production.");
+  return { enabled: true };
+}
+
+/**
+ * Bearer secret for the internal payout processing endpoint (called by a
+ * scheduler). null leaves that endpoint switched off.
+ */
+export function getPayoutJobSecret(): string | null {
+  const secret = read("PAYOUT_JOB_SECRET");
+  if (!secret) return null;
+  if (secret.length < 32) throw new ConfigError("PAYOUT_JOB_SECRET must be at least 32 characters long.");
+  return secret;
+}
+
 /** null when email delivery hasn't been configured */
 export function getResendConfig(): ResendConfig | null {
   const apiKey = read("RESEND_API_KEY");

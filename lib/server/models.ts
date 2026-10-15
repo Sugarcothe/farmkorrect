@@ -2,6 +2,13 @@ import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
 import type { CredentialStatus } from "@/lib/profile/types";
+import type {
+  Currency,
+  EarningSourceType,
+  LedgerEntryType,
+  PayoutFailureReason,
+  PayoutStatus,
+} from "@/lib/wallet/types";
 
 // Shapes of the documents persisted in MongoDB. Nothing here is ever sent to
 // the browser as-is; see the public types in lib/auth/types.ts.
@@ -16,6 +23,11 @@ export const COLLECTIONS = {
   services: "services",
   payoutAccounts: "payout_accounts",
   bankVerifications: "bank_verifications",
+  ledgerEntries: "ledger_entries",
+  fulfillments: "fulfillments",
+  walletAccounts: "wallet_accounts",
+  payouts: "payouts",
+  providerEvents: "provider_events",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -231,4 +243,110 @@ export type RateLimitDoc = {
   _id: string;
   count: number;
   expiresAt: Date;
+};
+
+// --- wallet & earnings -------------------------------------------------------
+
+export type LedgerSource = { type: EarningSourceType; id: string };
+
+/**
+ * One immutable line of the financial ledger, the only record balances are
+ * derived from. Entries are only ever inserted, never updated or deleted;
+ * a correction is a new, compensating entry. `amountKobo` is always a
+ * positive integer: what it does to each balance is decided by `type` (see
+ * ENTRY_EFFECTS in lib/server/ledger.ts).
+ */
+export type LedgerEntryDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  type: LedgerEntryType;
+  amountKobo: number;
+  currency: Currency;
+  /** the order or booking an earning, fee or refund belongs to */
+  source: LedgerSource | null;
+  /** the payout a hold, release or paid entry belongs to */
+  payoutId: ObjectId | null;
+  /** the confirmed payment an earning came from */
+  paymentReference: string | null;
+  /** the refund a refund entry records */
+  refundId: string | null;
+  /** unique: the same event can never be recorded twice */
+  idempotencyKey: string;
+  /** per user, increasing in the order entries were written (pagination) */
+  sequence: number;
+  createdAt: Date;
+};
+
+/**
+ * Delivery and dispute state of an order or booking: the trusted record of
+ * when it was delivered, which starts the 24-hour settlement window.
+ * `deliveredAt` is set once and never moved.
+ */
+export type FulfillmentDoc = {
+  _id: ObjectId;
+  sourceType: EarningSourceType;
+  sourceId: string;
+  deliveredAt: Date | null;
+  /** set while a dispute is open; its earnings can't be withdrawn */
+  disputedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Not a balance: a per-user lock and entry counter. Every ledger write for a
+ * user increments it inside the same transaction, so two concurrent writes
+ * (e.g. two payout requests) conflict and are run one after the other, each
+ * seeing the other's entries.
+ */
+export type WalletAccountDoc = {
+  _id: ObjectId;
+  sequence: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type PayoutHistoryItem = { status: PayoutStatus; at: Date; by: "user" | "processor" | "webhook" | "reconciliation" };
+
+/** A merchant-initiated payout to their verified Paystack recipient. */
+export type PayoutDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  /** sent by the browser, unique per user: a resubmission returns this payout */
+  idempotencyKey: string;
+  amountKobo: number;
+  currency: Currency;
+  status: PayoutStatus;
+  /** the account it goes to, as it was when requested (never sent to the browser) */
+  payoutAccountId: ObjectId;
+  recipientCode: string;
+  bankName: string;
+  accountNumberLast4: string;
+  /** the transfer reference sent to Paystack: fkp_<payout id> */
+  reference: string;
+  transferCode: string | null;
+  /** last status Paystack reported, or "unknown" after an ambiguous call */
+  providerStatus: string | null;
+  failureReason: PayoutFailureReason | null;
+  /** something needs a person to look at it (e.g. success reported after a failure) */
+  issue: string | null;
+  /** set when the transfer was sent to Paystack; it's never sent twice */
+  transferInitiatedAt: Date | null;
+  lastCheckedAt: Date | null;
+  requestedAt: Date;
+  processingAt: Date | null;
+  paidAt: Date | null;
+  failedAt: Date | null;
+  history: PayoutHistoryItem[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** A Paystack webhook that was applied, so a redelivery is recognised. */
+export type ProviderEventDoc = {
+  /** SHA-256 of the raw body */
+  _id: string;
+  event: string;
+  reference: string | null;
+  receivedAt: Date;
 };

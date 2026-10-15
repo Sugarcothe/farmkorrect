@@ -69,6 +69,24 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // gone an hour after expiry; they hold the account name, so not kept long
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 3_600 },
   ],
+  [COLLECTIONS.ledgerEntries]: [
+    // the same earning, fee, refund or payout step can only be recorded once
+    { key: { idempotencyKey: 1 }, name: "idempotency_unique", unique: true },
+    // a user's history, newest first, and the per-user write order
+    { key: { userId: 1, sequence: -1 }, name: "user_sequence", unique: true },
+    { key: { "source.type": 1, "source.id": 1 }, name: "source" },
+    { key: { payoutId: 1 }, name: "payout", partialFilterExpression: { payoutId: { $type: "objectId" } } },
+  ],
+  [COLLECTIONS.fulfillments]: [
+    { key: { sourceType: 1, sourceId: 1 }, name: "source_unique", unique: true },
+  ],
+  [COLLECTIONS.payouts]: [
+    { key: { userId: 1, idempotencyKey: 1 }, name: "idempotency_unique", unique: true },
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    { key: { userId: 1, createdAt: -1 }, name: "user_recent" },
+    // the processing job's queue
+    { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
+  ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
   ],

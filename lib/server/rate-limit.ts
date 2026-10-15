@@ -26,6 +26,9 @@ export const LIMITS = {
   serviceChangesPerUser: { limit: 120, windowMs: 60 * 60_000 },
   bankResolvesPerUser: { limit: 10, windowMs: 60 * 60_000 },
   bankAccountSavesPerUser: { limit: 10, windowMs: 60 * 60_000 },
+  payoutRequestsPerUser: { limit: 10, windowMs: 60 * 60_000 },
+  walletReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

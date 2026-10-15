@@ -10,6 +10,7 @@ const HIDDEN_ON = [
   /^\/profile\/edit(\/|$)/,
   /^\/profile\/services\/(new|[^/]+\/edit)\/?$/,
   /^\/profile\/bank-details\/setup\/?$/,
+  /^\/wallet\/payout\/?$/,
 ];
 
 export function BottomNav({ tabs }: { tabs: readonly NavTab[] }) {
