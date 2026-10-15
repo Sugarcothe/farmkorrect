@@ -111,7 +111,7 @@ const PROFESSIONAL_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
   { label: "Jobs", icon: "briefcase", href: null },
   { label: "Availability", icon: "calendar", href: null },
-  { label: "Earnings", icon: "wallet", href: null },
+  { label: "Earnings", icon: "wallet", href: "/wallet" },
   { label: "Profile", icon: "user", href: "/profile" },
 ];
 
@@ -119,7 +119,7 @@ const FARMER_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
   { label: "Market", icon: "store", href: null },
   { label: "Training", icon: "graduation-cap", href: null },
-  { label: "Finances", icon: "wallet", href: null },
+  { label: "Finances", icon: "wallet", href: "/wallet" },
   { label: "Profile", icon: "user", href: "/profile" },
 ];
 

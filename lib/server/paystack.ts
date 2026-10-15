@@ -1,8 +1,10 @@
 import "server-only";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { ConfigError, getPaystackConfig, type PaystackConfig } from "./config";
 
-// A small client for the three Paystack calls bank details need: the bank
-// list, account-name resolution and transfer-recipient creation. Requests
+// A small client for the Paystack calls the app makes: the bank list,
+// account-name resolution and transfer recipients (bank details), and
+// transfers, their verification and webhook signatures (payouts). Requests
 // are made from the server with the secret key, which never leaves it.
 // Responses are validated field by field; nothing from Paystack is logged
 // (only the operation and HTTP status) or passed on as-is.
@@ -45,7 +47,7 @@ function requireConfig(): PaystackConfig {
   return config;
 }
 
-type Json = Record<string, unknown>;
+export type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => typeof value === "object" && value !== null && !Array.isArray(value);
 
 async function paystack(operation: string, path: string, init: RequestInit = {}): Promise<{ status: number; body: Json | null }> {
@@ -212,4 +214,112 @@ export async function createTransferRecipient(input: NewRecipient): Promise<{ re
     (details.bank_code === undefined || details.bank_code === input.bankCode);
   if (!matches) throw unexpected("recipient creation (malformed)", status);
   return { recipientCode: code };
+}
+
+// --- transfers ---------------------------------------------------------------
+
+/** What a Paystack transfer status means for a payout. */
+export type TransferOutcome = "paid" | "failed" | "pending";
+
+const TRANSFER_OUTCOMES: Record<string, TransferOutcome> = {
+  success: "paid",
+  failed: "failed",
+  reversed: "failed",
+  abandoned: "failed",
+  blocked: "failed",
+  rejected: "failed",
+  pending: "pending",
+  received: "pending",
+  queued: "pending",
+  processing: "pending",
+  // needs an OTP: transfer OTP must be disabled for API payouts
+  otp: "pending",
+};
+
+/** null for a status we don't know: treated as "not settled yet". */
+export function transferOutcome(status: string): TransferOutcome | null {
+  return Object.hasOwn(TRANSFER_OUTCOMES, status) ? TRANSFER_OUTCOMES[status] : null;
+}
+
+export type TransferResult = {
+  status: string;
+  reference: string;
+  amountKobo: number;
+  transferCode: string | null;
+  recipientCode: string | null;
+};
+
+const TRANSFER_CODE = /^TRF_[A-Za-z0-9]+$/;
+
+/** Validates the transfer object in a Paystack response or webhook. */
+export function parseTransfer(data: Json): TransferResult | null {
+  const { status, reference, amount, currency, transfer_code: code } = data;
+  const recipient = isObject(data.recipient) ? data.recipient.recipient_code : data.recipient;
+  if (typeof status !== "string" || !/^[a-z_]{1,30}$/.test(status)) return null;
+  if (typeof reference !== "string" || typeof amount !== "number" || !Number.isSafeInteger(amount)) return null;
+  if (currency !== undefined && currency !== "NGN") return null;
+  if (code !== undefined && code !== null && (typeof code !== "string" || !TRANSFER_CODE.test(code))) return null;
+  return {
+    status,
+    reference,
+    amountKobo: amount,
+    transferCode: typeof code === "string" ? code : null,
+    recipientCode: typeof recipient === "string" && RECIPIENT_CODE.test(recipient) ? recipient : null,
+  };
+}
+
+export type NewTransfer = { amountKobo: number; recipientCode: string; reference: string; reason: string };
+
+/**
+ * Sends money from the Paystack balance to a saved recipient. Our reference
+ * identifies the transfer from then on; callers must never send the same
+ * payout twice (reconcile with verifyTransfer instead).
+ *
+ * - PaystackError "rejected": Paystack refused it (no transfer was made)
+ * - PaystackError "unavailable": the outcome is unknown and must be checked
+ *   later with verifyTransfer
+ */
+export async function initiateTransfer(input: NewTransfer): Promise<TransferResult> {
+  const { status, body } = await paystack("transfer", "/transfer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: "balance",
+      amount: input.amountKobo,
+      recipient: input.recipientCode,
+      reference: input.reference,
+      reason: input.reason,
+      currency: "NGN",
+    }),
+  });
+  if (isRejection(status, body)) throw new PaystackError("rejected");
+  if (status !== 200 || body?.status !== true || !isObject(body.data)) throw unexpected("transfer", status);
+  const transfer = parseTransfer(body.data);
+  if (!transfer || transfer.reference !== input.reference || transfer.amountKobo !== input.amountKobo)
+    throw unexpected("transfer (malformed)", status);
+  return transfer;
+}
+
+/** The transfer with our reference, or null if Paystack has none. */
+export async function verifyTransfer(reference: string): Promise<TransferResult | null> {
+  const { status, body } = await paystack("transfer verification", `/transfer/verify/${encodeURIComponent(reference)}`);
+  if (status === 404 || (status === 400 && body?.status === false)) return null;
+  if (status !== 200 || body?.status !== true || !isObject(body.data)) throw unexpected("transfer verification", status);
+  const transfer = parseTransfer(body.data);
+  if (!transfer || transfer.reference !== reference) throw unexpected("transfer verification (malformed)", status);
+  return transfer;
+}
+
+// --- webhooks ------------------------------------------------------------------
+
+/**
+ * Whether `signature` (the x-paystack-signature header) is Paystack's
+ * HMAC-SHA512 of exactly these raw bytes, keyed with our secret key.
+ */
+export function isValidWebhookSignature(rawBody: Buffer, signature: string | null): boolean {
+  if (!signature || !/^[0-9a-f]{128}$/i.test(signature)) return false;
+  const { secretKey } = requireConfig();
+  const expected = createHmac("sha512", secretKey).update(rawBody).digest();
+  const given = Buffer.from(signature, "hex");
+  return given.length === expected.length && timingSafeEqual(given, expected);
 }

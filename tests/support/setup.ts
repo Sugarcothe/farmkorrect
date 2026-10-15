@@ -37,6 +37,9 @@ const TEST_ENV: Record<string, string> = {
   CLOUDINARY_FOLDER: "",
   TRUST_PROXY_HEADERS: "true",
   PAYSTACK_SECRET_KEY: TEST_PAYSTACK_KEY,
+  // on against the fake Paystack; tests switch it off where needed
+  PAYSTACK_TRANSFERS_ENABLED: "true",
+  PAYOUT_JOB_SECRET: "test-payout-job-secret-at-least-32-chars",
 };
 
 let replSet: MongoMemoryReplSet;

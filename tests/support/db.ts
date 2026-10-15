@@ -3,12 +3,17 @@ import {
   type BankVerificationDoc,
   COLLECTIONS,
   type FarmDoc,
+  type FulfillmentDoc,
+  type LedgerEntryDoc,
   type OtpChallengeDoc,
   type PayoutAccountDoc,
+  type PayoutDoc,
+  type ProviderEventDoc,
   type PasswordResetDoc,
   type ServiceDoc,
   type SessionDoc,
   type UserDoc,
+  type WalletAccountDoc,
 } from "@/lib/server/models";
 
 /** Direct collection access for asserting on (and adjusting) stored state. */
@@ -23,6 +28,11 @@ export async function collections() {
     services: db.collection<ServiceDoc>(COLLECTIONS.services),
     payoutAccounts: db.collection<PayoutAccountDoc>(COLLECTIONS.payoutAccounts),
     bankVerifications: db.collection<BankVerificationDoc>(COLLECTIONS.bankVerifications),
+    ledger: db.collection<LedgerEntryDoc>(COLLECTIONS.ledgerEntries),
+    fulfillments: db.collection<FulfillmentDoc>(COLLECTIONS.fulfillments),
+    wallets: db.collection<WalletAccountDoc>(COLLECTIONS.walletAccounts),
+    payouts: db.collection<PayoutDoc>(COLLECTIONS.payouts),
+    providerEvents: db.collection<ProviderEventDoc>(COLLECTIONS.providerEvents),
   };
 }
 

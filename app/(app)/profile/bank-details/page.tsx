@@ -8,6 +8,7 @@ import type { BankAccountSummary } from "@/lib/bank-details/types";
 import { maskAccountNumber } from "@/lib/bank-details/validation";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
 import { findCurrentAccount, toSummary } from "@/lib/server/payout-accounts";
+import { payoutsEnabled } from "@/lib/server/payouts";
 import { isPaystackConfigured } from "@/lib/server/paystack";
 
 export const metadata: Metadata = { title: "Bank Details" };
@@ -37,6 +38,7 @@ export default async function BankDetailsPage({
   const current = await findCurrentAccount(user._id);
   const account = current ? toSummary(current) : null;
   const configured = isPaystackConfigured();
+  const payoutsOn = payoutsEnabled();
   const saved = (await searchParams).saved;
   const notice = typeof saved === "string" && Object.hasOwn(SAVED_NOTICE, saved) ? SAVED_NOTICE[saved] : null;
 
@@ -51,8 +53,20 @@ export default async function BankDetailsPage({
         </p>
         <p className="mt-3 mb-5 flex gap-2 rounded-xl bg-primary/6 px-3.5 py-2.5 text-xs leading-relaxed text-primary">
           <Icon name="wallet" className="mt-px size-4 shrink-0" />
-          Payouts aren&apos;t available yet. Saving an account doesn&apos;t move any money; it gets you ready for
-          when they launch.
+          {payoutsOn ? (
+            <span>
+              Saving an account doesn&apos;t move any money. Request payouts from your{" "}
+              <Link href="/wallet" className="font-semibold underline">
+                Wallet
+              </Link>
+              .
+            </span>
+          ) : (
+            <span>
+              Payouts aren&apos;t available yet. Saving an account doesn&apos;t move any money; it gets you ready for
+              when they launch.
+            </span>
+          )}
         </p>
 
         {notice && (

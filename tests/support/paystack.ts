@@ -1,11 +1,23 @@
-// A minimal fake of the Paystack endpoints bank details use. Nothing reaches
+// A minimal fake of the Paystack endpoints the app uses. Nothing reaches
 // the real Paystack: tests set up accounts and failures here, and every
 // request is recorded so tests can check what was (and wasn't) sent.
 
 export const TEST_PAYSTACK_KEY = "sk_test_fakefakefakefakefake";
 
-export type PaystackBehaviour = "ok" | "reject" | "server-error" | "malformed" | "timeout" | "unauthorized";
-type Operation = "banks" | "resolve" | "recipient";
+import { createHmac } from "node:crypto";
+
+export type PaystackBehaviour =
+  | "ok"
+  | "reject"
+  | "server-error"
+  | "malformed"
+  | "timeout"
+  | "unauthorized"
+  // transfers only: Paystack creates the transfer, but the response never arrives
+  | "timeout-after-create";
+type Operation = "banks" | "resolve" | "recipient" | "transfer" | "verify";
+
+export type FakeTransfer = { reference: string; amount: number; recipient: string; status: string; transfer_code: string };
 
 export const BANKS = [
   { name: "Zenith Bank", code: "057", active: true, is_deleted: false, supports_transfer: true, type: "nuban", currency: "NGN" },
@@ -21,7 +33,14 @@ export const BANKS = [
 export const paystack = {
   /** registered account names, by `${bankCode}:${accountNumber}` */
   accounts: new Map<string, string>(),
-  behaviour: { banks: "ok", resolve: "ok", recipient: "ok" } as Record<Operation, PaystackBehaviour>,
+  behaviour: { banks: "ok", resolve: "ok", recipient: "ok", transfer: "ok", verify: "ok" } as Record<
+    Operation,
+    PaystackBehaviour
+  >,
+  /** transfers Paystack holds, by reference */
+  transfers: new Map<string, FakeTransfer>(),
+  /** the status a new transfer gets */
+  newTransferStatus: "success",
   /** recipients created, by `${bankCode}:${accountNumber}` (Paystack returns the existing one for a duplicate) */
   recipients: new Map<string, { code: string; name: string; metadata: unknown }>(),
   requests: [] as { operation: Operation; method: string; url: string; authorization: string | null; body: unknown }[],
@@ -33,7 +52,9 @@ export function resetPaystack() {
   paystack.accounts.clear();
   paystack.accounts.set("057:0123456789", "ADAEZE OKAFOR");
   paystack.accounts.set("044:1234567890", "ADAEZE  CHIOMA OKAFOR");
-  paystack.behaviour = { banks: "ok", resolve: "ok", recipient: "ok" };
+  paystack.behaviour = { banks: "ok", resolve: "ok", recipient: "ok", transfer: "ok", verify: "ok" };
+  paystack.transfers.clear();
+  paystack.newTransferStatus = "success";
   paystack.recipients.clear();
   paystack.requests.length = 0;
   paystack.bankListCalls = 0;
@@ -61,7 +82,17 @@ export async function fakePaystack(url: URL, init: RequestInit = {}): Promise<Re
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
   const operation: Operation | null =
-    url.pathname === "/bank" ? "banks" : url.pathname === "/bank/resolve" ? "resolve" : url.pathname === "/transferrecipient" ? "recipient" : null;
+    url.pathname === "/bank"
+      ? "banks"
+      : url.pathname === "/bank/resolve"
+        ? "resolve"
+        : url.pathname === "/transferrecipient"
+          ? "recipient"
+          : url.pathname === "/transfer"
+            ? "transfer"
+            : url.pathname.startsWith("/transfer/verify/")
+              ? "verify"
+              : null;
   if (!operation) throw new Error(`Unexpected Paystack request in tests: ${url.pathname}`);
   const body = init.body ? JSON.parse(String(init.body)) : undefined;
   paystack.requests.push({ operation, method, url: url.toString(), authorization: headers.get("authorization"), body });
@@ -94,6 +125,14 @@ export async function fakePaystack(url: URL, init: RequestInit = {}): Promise<Re
     });
   }
 
+  if (operation === "transfer") return fakeTransfer(method, body, behaviour);
+  if (operation === "verify") {
+    if (behaviour === "malformed") return json({ status: true, data: { reference: 42 } });
+    const transfer = paystack.transfers.get(decodeURIComponent(url.pathname.slice("/transfer/verify/".length)));
+    if (!transfer) return json({ status: false, message: "Transfer not found" }, 404);
+    return json({ status: true, message: "Transfer retrieved", data: transferData(transfer) });
+  }
+
   // recipient
   if (method !== "POST") throw new Error("Transfer recipients must be created with POST");
   const input = body as { type: string; name: string; account_number: string; bank_code: string; currency: string; metadata: unknown };
@@ -122,4 +161,46 @@ export async function fakePaystack(url: URL, init: RequestInit = {}): Promise<Re
     },
     201,
   );
+}
+
+function transferData(t: FakeTransfer) {
+  return {
+    amount: t.amount,
+    currency: "NGN",
+    reference: t.reference,
+    status: t.status,
+    transfer_code: t.transfer_code,
+    recipient: { recipient_code: t.recipient, type: "nuban" },
+  };
+}
+
+function fakeTransfer(method: string, body: unknown, behaviour: PaystackBehaviour): Response {
+  if (method !== "POST") throw new Error("Transfers must be created with POST");
+  const input = body as { source: string; amount: number; recipient: string; reference: string; currency: string };
+  if (behaviour === "reject") return json({ status: false, message: "Your balance is not enough to fulfil this request" }, 400);
+  if (behaviour === "malformed") return json({ status: true, data: { reference: input.reference, amount: "lots" } });
+  if (input.source !== "balance" || input.currency !== "NGN" || !Number.isSafeInteger(input.amount))
+    return json({ status: false, message: "Invalid transfer" }, 400);
+  if (paystack.transfers.has(input.reference))
+    return json({ status: false, message: "Duplicate Transfer Reference" }, 400);
+  const transfer: FakeTransfer = {
+    reference: input.reference,
+    amount: input.amount,
+    recipient: input.recipient,
+    status: paystack.newTransferStatus,
+    transfer_code: `TRF_test${paystack.transfers.size + 1}x`,
+  };
+  paystack.transfers.set(input.reference, transfer);
+  if (behaviour === "timeout-after-create") {
+    const error = new Error("The operation was aborted due to timeout");
+    error.name = "TimeoutError";
+    throw error;
+  }
+  return json({ status: true, message: "Transfer has been queued", data: transferData(transfer) });
+}
+
+/** A webhook body for a transfer, and its valid signature. */
+export function signedTransferEvent(event: string, transfer: FakeTransfer, key = TEST_PAYSTACK_KEY) {
+  const raw = JSON.stringify({ event, data: transferData(transfer) });
+  return { raw, signature: createHmac("sha512", key).update(raw).digest("hex") };
 }
