@@ -10,6 +10,12 @@ import type {
   ProductUnit,
 } from "@/lib/orders/types";
 import type { CredentialStatus } from "@/lib/profile/types";
+import type {
+  ExternalChannel,
+  NotificationCategory,
+  NotificationPreferences,
+  NotificationType,
+} from "@/lib/notifications/types";
 import type { ReviewStatus } from "@/lib/reviews/types";
 import type {
   Currency,
@@ -42,6 +48,10 @@ export const COLLECTIONS = {
   payments: "payments",
   refunds: "refunds",
   reviews: "reviews",
+  notifications: "notifications",
+  notificationDeliveries: "notification_deliveries",
+  notificationPreferences: "notification_preferences",
+  pushSubscriptions: "push_subscriptions",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -222,6 +232,14 @@ export type PayoutAccountDoc = {
   /** set when a newer account took its place */
   replacedAt: Date | null;
   replacedBy: ObjectId | null;
+  /** true when, on becoming current, it took the place of an earlier account (absent on older records) */
+  replacedPrevious?: boolean;
+  /**
+   * Set in the same write as any change that notifies someone; cleared once
+   * those notifications exist. The notification job retries any that stay
+   * set (see lib/server/notifications.ts). Absent on records made earlier.
+   */
+  notifySyncAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -352,6 +370,14 @@ export type PayoutDoc = {
   paidAt: Date | null;
   failedAt: Date | null;
   history: PayoutHistoryItem[];
+  /**
+   * Set in the same write as any change that notifies someone; cleared once
+   * those notifications exist. The notification job retries any that stay
+   * set (see lib/server/notifications.ts). Absent on records made earlier.
+   */
+  notifySyncAt?: Date | null;
+  /** how many history items have been turned into notifications */
+  notifiedThrough?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -454,6 +480,14 @@ export type OrderDoc = {
   /** something needs a person to look at it (e.g. a payment for the wrong amount) */
   reviewIssue: string | null;
   history: OrderHistoryDoc[];
+  /**
+   * Set in the same write as any change that notifies someone; cleared once
+   * those notifications exist. The notification job retries any that stay
+   * set (see lib/server/notifications.ts). Absent on records made earlier.
+   */
+  notifySyncAt?: Date | null;
+  /** how many history items have been turned into notifications */
+  notifiedThrough?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -551,6 +585,96 @@ export type ReviewDoc = {
   verifiedPurchase: boolean;
   editedAt: Date | null;
   withdrawnAt: Date | null;
+  /**
+   * Set in the same write as any change that notifies someone; cleared once
+   * those notifications exist. The notification job retries any that stay
+   * set (see lib/server/notifications.ts). Absent on records made earlier.
+   */
+  notifySyncAt?: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// --- notifications ---------------------------------------------------------------
+
+/**
+ * One entry in a user's inbox. Only short, safe text is kept: never an
+ * address, phone number, bank detail, payment payload or secret. `eventKey`
+ * names the business event it came from; with the recipient it's unique, so
+ * the same event can never notify the same person twice. Kept until the
+ * account is removed (there's no automatic expiry).
+ */
+export type NotificationDoc = {
+  _id: ObjectId;
+  recipientUserId: ObjectId;
+  type: NotificationType;
+  category: NotificationCategory;
+  title: string;
+  body: string;
+  /** an internal path checked by safeInternalPath, or null */
+  url: string | null;
+  /** e.g. order:<id>:<history index>:<event> */
+  eventKey: string;
+  /** what it's about, for support; ids only */
+  subject: { kind: "order" | "payout" | "review" | "bank_account" | "account"; id: string };
+  /** when the business event happened */
+  eventAt: Date;
+  readAt: Date | null;
+  createdAt: Date;
+};
+
+export type DeliveryState =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "retryable_failure"
+  | "failed"
+  | "exhausted"
+  | "skipped";
+
+/**
+ * The outbox: one external delivery (email, SMS or push) of a notification.
+ * Created with the notification and sent later by the notification job,
+ * never inside a database transaction. The inbox entry never depends on it.
+ */
+export type NotificationDeliveryDoc = {
+  _id: ObjectId;
+  notificationId: ObjectId;
+  recipientUserId: ObjectId;
+  channel: ExternalChannel;
+  state: DeliveryState;
+  attempts: number;
+  /** when it may next be claimed (pending / retryable_failure only) */
+  nextAttemptAt: Date | null;
+  /** set while a worker holds it; a claim older than the lease is recovered */
+  claimToken: ObjectId | null;
+  claimedAt: Date | null;
+  providerMessageId: string | null;
+  /** a short failure category such as http_503 or not_configured; never content or contact details */
+  lastFailure: string | null;
+  sentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** A user's channel choices per category. Missing means the defaults. */
+export type NotificationPreferencesDoc = {
+  /** the user's id */
+  _id: ObjectId;
+  categories: NotificationPreferences;
+  updatedAt: Date;
+};
+
+/** A browser that opted in to push notifications for this user. */
+export type PushSubscriptionDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  /** SHA-256 of the endpoint, for lookups */
+  endpointHash: string;
+  /** the push service URL; a capability, so never logged or returned */
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  lastSuccessAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };

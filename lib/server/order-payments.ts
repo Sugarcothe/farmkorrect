@@ -7,7 +7,7 @@ import { HttpError } from "./http";
 import type { OrderDoc, PaymentDoc, UserDoc } from "./models";
 import { syncOrderLedger } from "./order-ledger";
 import { refundLatePayment } from "./order-refunds";
-import { bestEffort, flagOrder, historyItem, inTransaction, isPayable, orderCollections } from "./order-store";
+import { bestEffort, flagOrder, historyItem, inTransaction, isPayable, notifyOrder, orderCollections } from "./order-store";
 import {
   initializeTransaction,
   PaystackError,
@@ -96,6 +96,7 @@ async function markPaid(payment: PaymentDoc, transaction: TransactionResult): Pr
           paidKobo: transaction.amountKobo,
           paidAt: now,
           ledgerSyncAt: now,
+          notifySyncAt: now,
           updatedAt: now,
         },
         $push: { history: historyItem("paid", "system", null, now) },
@@ -106,6 +107,7 @@ async function markPaid(payment: PaymentDoc, transaction: TransactionResult): Pr
   });
   if (orderUpdated) {
     await bestEffort("ledger sync", () => syncOrderLedger(payment.orderId));
+    await notifyOrder(payment.orderId);
     return "paid";
   }
   const order = await orders.findOne({ _id: payment.orderId });
@@ -149,13 +151,14 @@ async function applyTransaction(payment: PaymentDoc, transaction: TransactionRes
     if (failed) {
       const { orders } = await orderCollections();
       const now = new Date();
-      await orders.updateOne(
+      const marked = await orders.updateOne(
         { _id: payment.orderId, paymentStatus: "pending" },
         {
-          $set: { paymentStatus: "failed", updatedAt: now },
+          $set: { paymentStatus: "failed", notifySyncAt: now, updatedAt: now },
           $push: { history: historyItem("payment_failed", "system", null, now) },
         },
       );
+      if (marked.modifiedCount === 1) await notifyOrder(payment.orderId);
     }
     return "failed";
   }

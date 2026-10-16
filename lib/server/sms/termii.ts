@@ -5,7 +5,8 @@ import { getFixedOtpCode, getTermiiConfig, isDevSmsConsoleEnabled } from "../con
 // (POST {base}/api/sms/send). Only the outcome is reported back; message text,
 // phone numbers and provider responses are never logged.
 
-export type DeliveryResult = { delivered: true } | { delivered: false; reason: string };
+/** `messageId` is the provider's id for an accepted message (absent when nothing was really sent). */
+export type DeliveryResult = { delivered: true; messageId?: string } | { delivered: false; reason: string };
 
 export function isSmsConfigured(): boolean {
   return getTermiiConfig() !== null || getFixedOtpCode() !== null || isDevSmsConsoleEnabled();
@@ -40,7 +41,7 @@ export async function sendSms(toE164: string, message: string): Promise<Delivery
     });
     const body = (await res.json().catch(() => null)) as { message_id?: unknown } | null;
     if (res.ok && body && typeof body.message_id === "string" && body.message_id) {
-      return { delivered: true };
+      return { delivered: true, messageId: body.message_id.slice(0, 100) };
     }
     console.error(`[termii] SMS not accepted (HTTP ${res.status})`);
     return { delivered: false, reason: `http_${res.status}` };

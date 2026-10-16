@@ -7,6 +7,7 @@ import { hashToken, hmac, randomToken, safeEqualHex } from "./crypto";
 import { getDb, getMongoClient } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type BankVerificationDoc, type PayoutAccountDoc } from "./models";
+import { queueNotifications, syncBankAccountNotification } from "./notifications";
 import { createTransferRecipient, listBanks, PaystackError, resolveAccount, type PaystackBank } from "./paystack";
 
 // Bank details for payouts, in two server-side steps:
@@ -309,6 +310,9 @@ export async function confirmAccount(
               recipientCode,
               recipientCreatedAt: savedAt,
               current: true,
+              // the security notice is owed from this commit on (see lib/server/notifications.ts)
+              replacedPrevious: current !== null,
+              notifySyncAt: savedAt,
               updatedAt: savedAt,
             },
           },
@@ -346,6 +350,8 @@ export async function confirmAccount(
         : "We couldn't save your bank account. Nothing was saved. Please try again.",
     );
   }
+
+  await queueNotifications("bank account notice", () => syncBankAccountNotification(attempt._id));
 
   return toSummary({
     ...attempt,

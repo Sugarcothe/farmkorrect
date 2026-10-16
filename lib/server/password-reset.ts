@@ -5,6 +5,7 @@ import { hashToken, randomToken } from "./crypto";
 import { getDb, getMongoClient } from "./db";
 import { isEmailConfigured, sendEmail } from "./email/resend";
 import { COLLECTIONS, type PasswordResetChannel, type PasswordResetDoc, type UserDoc } from "./models";
+import { notifyPasswordChanged, queueNotifications } from "./notifications";
 import { revokeUserSessions } from "./sessions";
 import { sendSms, type DeliveryResult } from "./sms/termii";
 import { updatePasswordHash } from "./users";
@@ -89,8 +90,10 @@ export async function sendPasswordReset(user: UserDoc): Promise<DeliveryResult> 
 export async function completePasswordReset(token: string, passwordHash: string): Promise<boolean> {
   const collection = await resets();
   const client = await getMongoClient();
-  return client.withSession((dbSession) =>
+  const changed: { value: { userId: ObjectId; resetId: ObjectId; at: Date } | null } = { value: null };
+  const done = await client.withSession((dbSession) =>
     dbSession.withTransaction(async () => {
+      changed.value = null;
       const now = new Date();
       const claimed = await collection.findOneAndUpdate(
         { tokenHash: hashToken(token), usedAt: null, supersededAt: null, expiresAt: { $gt: now } },
@@ -105,9 +108,17 @@ export async function completePasswordReset(token: string, passwordHash: string)
         { $set: { supersededAt: now } },
         { session: dbSession },
       );
+      changed.value = { userId: claimed.userId, resetId: claimed._id, at: now };
       return true;
     }),
   );
+  // a security notice, only once the new password is committed
+  const notice = changed.value;
+  if (done && notice)
+    await queueNotifications("password change notice", () =>
+      notifyPasswordChanged(notice.userId, notice.resetId, notice.at),
+    );
+  return done;
 }
 
 function escapeHtml(value: string) {

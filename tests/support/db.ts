@@ -5,6 +5,9 @@ import {
   type FarmDoc,
   type FulfillmentDoc,
   type LedgerEntryDoc,
+  type NotificationDeliveryDoc,
+  type NotificationDoc,
+  type NotificationPreferencesDoc,
   type OrderDoc,
   type OtpChallengeDoc,
   type PayoutAccountDoc,
@@ -12,6 +15,7 @@ import {
   type PayoutDoc,
   type ProductDoc,
   type ProviderEventDoc,
+  type PushSubscriptionDoc,
   type PasswordResetDoc,
   type RefundDoc,
   type ReviewDoc,
@@ -43,6 +47,10 @@ export async function collections() {
     orderPayments: db.collection<PaymentDoc>(COLLECTIONS.payments),
     refunds: db.collection<RefundDoc>(COLLECTIONS.refunds),
     reviews: db.collection<ReviewDoc>(COLLECTIONS.reviews),
+    notifications: db.collection<NotificationDoc>(COLLECTIONS.notifications),
+    deliveries: db.collection<NotificationDeliveryDoc>(COLLECTIONS.notificationDeliveries),
+    notificationPreferences: db.collection<NotificationPreferencesDoc>(COLLECTIONS.notificationPreferences),
+    pushSubscriptions: db.collection<PushSubscriptionDoc>(COLLECTIONS.pushSubscriptions),
   };
 }
 

@@ -71,3 +71,61 @@ function isStaticAsset(url) {
     /\.(?:png|jpe?g|webp|svg|ico|woff2?)$/.test(url.pathname)
   );
 }
+
+// --- push notifications ----------------------------------------------------
+// The server sends { title, body, url, tag } (lib/server/notification-delivery.ts).
+// A notification only ever opens a path on this site: anything else (another
+// origin, "//host", backslashes, control characters) falls back to the inbox.
+
+const INBOX_PATH = "/notifications";
+
+function safeInternalPath(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 300) return INBOX_PATH;
+  if (!value.startsWith("/") || value.startsWith("//") || /[\\s]/.test(value)) return INBOX_PATH;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 32 || code === 127) return INBOX_PATH;
+  }
+  try {
+    const url = new URL(value, self.location.origin);
+    if (url.origin !== self.location.origin) return INBOX_PATH;
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return INBOX_PATH;
+  }
+}
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = {};
+  }
+  const title = typeof data.title === "string" && data.title ? data.title.slice(0, 120) : "Farm Korret Nig";
+  const options = {
+    body: typeof data.body === "string" ? data.body.slice(0, 300) : "",
+    icon: "/icons/icon-192-v2.png",
+    badge: "/icons/icon-192-v2.png",
+    data: { url: safeInternalPath(data.url) },
+  };
+  if (typeof data.tag === "string" && /^[a-f0-9]{24}$/.test(data.tag)) options.tag = data.tag;
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL(safeInternalPath(event.notification.data && event.notification.data.url), self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (open && "navigate" in open) {
+        return open
+          .navigate(target)
+          .then((client) => (client || open).focus())
+          .catch(() => self.clients.openWindow(target));
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

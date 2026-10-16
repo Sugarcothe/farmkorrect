@@ -14,6 +14,7 @@ import { cleanReviewText, validateRating, validateReviewText } from "@/lib/revie
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type OrderDoc, type ProductDoc, type ReviewDoc, type UserDoc } from "./models";
+import { queueNotifications, syncReviewNotification } from "./notifications";
 import { parseObjectId, PRODUCT_NOT_FOUND } from "./products";
 
 // Product reviews. Who may review is decided here, from the stored orders:
@@ -296,13 +297,17 @@ export async function createReview(reviewer: UserDoc, productId: string, input: 
     verifiedPurchase: true,
     editedAt: null,
     withdrawnAt: null,
+    // the seller is told about a published review once it's stored
+    notifySyncAt: now,
     createdAt: now,
     updatedAt: now,
   };
   const { reviews } = await db();
+  const notifySeller = (id: ObjectId) => queueNotifications("review notice", () => syncReviewNotification(id));
   try {
     const doc: ReviewDoc = { _id: new ObjectId(), productId: product._id, reviewerUserId: reviewer._id, ...fields };
     await reviews.insertOne(doc);
+    await notifySeller(doc._id);
     return toMyReview(doc, product);
   } catch (error) {
     if (!(error instanceof MongoServerError && error.code === 11000)) throw error;
@@ -315,6 +320,7 @@ export async function createReview(reviewer: UserDoc, productId: string, input: 
     { returnDocument: "after" },
   );
   if (!replaced) throw new HttpError(409, ALREADY_REVIEWED);
+  await notifySeller(replaced._id);
   return toMyReview(replaced, product);
 }
 

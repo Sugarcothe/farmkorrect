@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UnreadDot } from "@/components/notifications/notification-bell";
 import { Icon } from "@/components/ui/icons";
 import type { NavTab } from "@/lib/profile/config";
 
@@ -38,11 +39,13 @@ export function BottomNav({ tabs }: { tabs: readonly NavTab[] }) {
                 <Link
                   href={tab.href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex h-16 flex-col items-center justify-center gap-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${
+                  className={`relative flex h-16 flex-col items-center justify-center gap-1.5 outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset ${
                     active ? "text-primary" : "text-foreground/50 hover:text-foreground"
                   }`}
                 >
                   {content}
+                  {/* notifications live under Profile, so its tab shows when something is unread */}
+                  {tab.href === "/profile" && <UnreadDot />}
                 </Link>
               ) : (
                 <span

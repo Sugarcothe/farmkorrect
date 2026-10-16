@@ -57,11 +57,13 @@ export function VerificationBadge({ credential }: { credential: CredentialStatus
 }
 
 /** Top bar for profile sub-pages; `back` is usually a <BackLink>. */
-export function ProfileTopBar({ title, back }: { title: string; back?: ReactNode }) {
+/** `action` is an optional control for the right-hand slot (e.g. the notifications bell). */
+export function ProfileTopBar({ title, back, action }: { title: string; back?: ReactNode; action?: ReactNode }) {
   return (
     <header className="sticky top-0 z-10 grid h-14 shrink-0 grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-3 backdrop-blur">
       {back ?? <span />}
       <h1 className="text-center text-base font-semibold">{title}</h1>
+      {action && <div className="flex justify-end">{action}</div>}
     </header>
   );
 }

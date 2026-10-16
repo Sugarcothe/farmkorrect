@@ -235,3 +235,39 @@ export function getResendConfig(): ResendConfig | null {
   const from = read("EMAIL_FROM");
   return apiKey && from ? { apiKey, from } : null;
 }
+
+/**
+ * Bearer secret for POST /api/internal/notifications/process (a scheduler
+ * calls it every minute or two to create any notifications still owed and
+ * send queued email, SMS and push deliveries). null leaves it switched off.
+ */
+export function getNotificationJobSecret(): string | null {
+  const secret = read("NOTIFICATION_JOB_SECRET");
+  if (!secret) return null;
+  if (secret.length < 32) throw new ConfigError("NOTIFICATION_JOB_SECRET must be at least 32 characters long.");
+  return secret;
+}
+
+export type WebPushConfig = { publicKey: string; privateKey: string; subject: string };
+
+/**
+ * null while Web Push isn't set up. Needs a VAPID key pair (generate one
+ * with `npx web-push generate-vapid-keys`) and a contact subject (mailto:
+ * or https:). The private key is server-only.
+ */
+export function getWebPushConfig(): WebPushConfig | null {
+  const publicKey = read("WEB_PUSH_VAPID_PUBLIC_KEY");
+  const privateKey = read("WEB_PUSH_VAPID_PRIVATE_KEY");
+  const subject = read("WEB_PUSH_SUBJECT");
+  if (!publicKey && !privateKey && !subject) return null;
+  if (!publicKey || !privateKey || !subject)
+    throw new ConfigError("WEB_PUSH_VAPID_PUBLIC_KEY, WEB_PUSH_VAPID_PRIVATE_KEY and WEB_PUSH_SUBJECT must be set together.");
+  // an uncompressed P-256 public key is 65 bytes, the private key 32 (base64url)
+  if (!/^[A-Za-z0-9_-]{86,88}$/.test(publicKey))
+    throw new ConfigError("WEB_PUSH_VAPID_PUBLIC_KEY must be a base64url VAPID public key.");
+  if (!/^[A-Za-z0-9_-]{42,44}$/.test(privateKey))
+    throw new ConfigError("WEB_PUSH_VAPID_PRIVATE_KEY must be a base64url VAPID private key.");
+  if (!/^(mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/.test(subject))
+    throw new ConfigError("WEB_PUSH_SUBJECT must be a mailto: address or an https:// URL.");
+  return { publicKey, privateKey, subject };
+}
