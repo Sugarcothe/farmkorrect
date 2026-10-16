@@ -61,7 +61,8 @@ export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIco
   notifications: {
     title: "Notifications",
     icon: "bell",
-    blurb: "Choose which alerts you get by SMS and in the app. Coming soon.",
+    blurb: "Choose how you hear about orders, payments, payouts and reviews: email, SMS or push.",
+    ready: true,
   },
   security: {
     title: "Security Settings",

@@ -16,6 +16,7 @@ import { claimOrderRefund, continueRefund } from "./order-refunds";
 import {
   bestEffort,
   historyItem,
+  notifyOrder,
   inTransaction,
   issueWindowEnd,
   ORDER_NOT_FOUND,
@@ -224,6 +225,8 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
         ledgerSyncAt: null,
         reviewIssue: null,
         history: [historyItem("created", "buyer", buyer._id, now)],
+        notifySyncAt: now,
+        notifiedThrough: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -233,7 +236,9 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
 
   for (let attempt = 0; ; attempt++) {
     try {
-      return { order: await place(), created: true };
+      const order = await place();
+      await notifyOrder(order._id);
+      return { order, created: true };
     } catch (error) {
       if (!(error instanceof MongoServerError && error.code === 11000)) throw error;
       // the same submission committed first, in another request
@@ -316,12 +321,14 @@ async function cancelUnpaid(order: OrderDoc, actor: Actor, reason: string, expir
         cancelledAt: now,
         cancelledBy: actor.by,
         cancelReason: reason,
+        notifySyncAt: now,
         updatedAt: now,
       },
       $push: { history: historyItem(expired ? "expired" : "cancelled", actor.by, actor.userId, now) },
     },
   );
   if (updated.modifiedCount !== 1) return false;
+  await notifyOrder(order._id);
   await bestEffort("closing payments", () => closeAttempts(order._id));
   await bestEffort("releasing stock", () => releaseStock(order._id, "system"));
   return true;
@@ -346,7 +353,10 @@ async function cancelPaid(order: OrderDoc, actor: Actor, reason: string): Promis
         fulfillmentStatus: { $in: CANCELLABLE[actor.by] },
         refundInFlight: null,
       },
-      { $set: { ...cancelled, updatedAt: now }, $push: { history: historyItem("cancelled", actor.by, actor.userId, now) } },
+      {
+        $set: { ...cancelled, notifySyncAt: now, updatedAt: now },
+        $push: { history: historyItem("cancelled", actor.by, actor.userId, now) },
+      },
       { session, returnDocument: "after" },
     );
     if (!updated) return false;
@@ -361,6 +371,7 @@ async function cancelPaid(order: OrderDoc, actor: Actor, reason: string): Promis
     return claimed;
   });
   if (refund === false) return false;
+  await notifyOrder(order._id);
   await bestEffort("releasing stock", () => releaseStock(order._id, "system"));
   if (refund) await bestEffort("refund", () => continueRefund(refund._id));
   else await bestEffort("ledger sync", () => syncOrderLedger(order._id));
@@ -439,6 +450,7 @@ export async function fulfilOrder(order: OrderDoc, sellerUserId: ObjectId, actio
         fulfillmentStatus: step.to,
         [step.at]: now,
         ...(action === "deliver" ? { ledgerSyncAt: now } : {}),
+        notifySyncAt: now,
         updatedAt: now,
       },
       $push: { history: historyItem(step.to, "seller", sellerUserId, now) },
@@ -450,6 +462,7 @@ export async function fulfilOrder(order: OrderDoc, sellerUserId: ObjectId, actio
     throw new HttpError(409, CANT_NOW);
   }
   if (action === "deliver") await bestEffort("ledger sync", () => syncOrderLedger(order._id));
+  await notifyOrder(order._id);
   return reload(updated);
 }
 
@@ -505,6 +518,7 @@ export async function refundOrder(
     throw error;
   }
   if (!refund) throw new HttpError(409, CANT_NOW);
+  await notifyOrder(order._id);
   await bestEffort("refund", () => continueRefund(refund._id));
   return reload(order);
 }
@@ -538,13 +552,14 @@ export async function reportIssue(order: OrderDoc, buyerUserId: ObjectId, note: 
       deliveredAt: { $gt: new Date(now.getTime() - SETTLEMENT_DELAY_MS) },
     },
     {
-      $set: { issue: { reportedAt: now, note, closedAt: null }, ledgerSyncAt: now, updatedAt: now },
+      $set: { issue: { reportedAt: now, note, closedAt: null }, ledgerSyncAt: now, notifySyncAt: now, updatedAt: now },
       $push: { history: historyItem("issue_reported", "buyer", buyerUserId, now) },
     },
     { returnDocument: "after" },
   );
   if (!updated) throw new HttpError(409, order.issue ? "You've already reported a problem with this order." : CANT_NOW);
   await bestEffort("ledger sync", () => syncOrderLedger(order._id));
+  await notifyOrder(order._id);
   return reload(updated);
 }
 
@@ -555,11 +570,14 @@ export async function closeIssue(number: string): Promise<OrderDoc | null> {
   const updated = await orders.findOneAndUpdate(
     { number, issue: { $ne: null }, "issue.closedAt": null },
     {
-      $set: { "issue.closedAt": now, ledgerSyncAt: now, updatedAt: now },
+      $set: { "issue.closedAt": now, ledgerSyncAt: now, notifySyncAt: now, updatedAt: now },
       $push: { history: historyItem("issue_closed", "system", null, now) },
     },
     { returnDocument: "after" },
   );
-  if (updated) await bestEffort("ledger sync", () => syncOrderLedger(updated._id));
+  if (updated) {
+    await bestEffort("ledger sync", () => syncOrderLedger(updated._id));
+    await notifyOrder(updated._id);
+  }
   return updated;
 }

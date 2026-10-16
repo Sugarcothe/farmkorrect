@@ -14,6 +14,7 @@ import { getDb } from "./db";
 import { HttpError } from "./http";
 import { MAX_PAGE_SIZE, spendableKobo, withWallet } from "./ledger";
 import { COLLECTIONS, type PayoutDoc, type PayoutHistoryItem } from "./models";
+import { queueNotifications, syncPayoutNotifications } from "./notifications";
 import { findCurrentAccount } from "./payout-accounts";
 import {
   initiateTransfer,
@@ -144,7 +145,7 @@ export async function requestPayout(
     throw new HttpError(409, NO_PAYOUT_ACCOUNT, { bankAccount: NO_PAYOUT_ACCOUNT });
 
   try {
-    return await withWallet(userId, async (tx) => {
+    const result = await withWallet(userId, async (tx) => {
       const duplicate = await collection.findOne({ userId, idempotencyKey: input.idempotencyKey }, { session: tx.session });
       if (duplicate) return { payout: sameRequest(duplicate, input), created: false };
 
@@ -180,6 +181,8 @@ export async function requestPayout(
         paidAt: null,
         failedAt: null,
         history: [historyItem("requested", "user", now)],
+        notifySyncAt: now,
+        notifiedThrough: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -189,6 +192,8 @@ export async function requestPayout(
       ]);
       return { payout: doc, created: true };
     });
+    if (result.created) await notifyPayout(result.payout._id);
+    return result;
   } catch (error) {
     // the same submission committed first, in another request
     if (error instanceof MongoServerError && error.code === 11000) {
@@ -200,6 +205,14 @@ export async function requestPayout(
 }
 
 // --- status changes ---------------------------------------------------------------
+
+/**
+ * Notifies the merchant of the payout's new history items once a change has
+ * committed (a no-op when there's nothing new). Never throws: the
+ * notification job retries anything left over.
+ */
+const notifyPayout = (payoutId: ObjectId) =>
+  queueNotifications("payout notifications", () => syncPayoutNotifications(payoutId));
 
 async function flagIssue(payoutId: ObjectId, issue: string, session?: ClientSession) {
   console.error(`[payouts] payout ${payoutId.toHexString()} needs review: ${issue}`);
@@ -224,6 +237,7 @@ async function markPaid(payout: PayoutDoc, transfer: TransferResult | null, by: 
           providerStatus: transfer?.status ?? "success",
           transferCode: transfer?.transferCode ?? payout.transferCode,
           lastCheckedAt: now,
+          notifySyncAt: now,
           updatedAt: now,
         },
         $push: { history: historyItem("paid", by, now) },
@@ -240,6 +254,7 @@ async function markPaid(payout: PayoutDoc, transfer: TransferResult | null, by: 
       { type: "payout_paid", amountKobo: payout.amountKobo, idempotencyKey: `payout_paid:${payout._id.toHexString()}`, payoutId: payout._id },
     ]);
   });
+  await notifyPayout(payout._id);
 }
 
 /** processing → failed, returning the held amount exactly once. */
@@ -261,6 +276,7 @@ async function markFailed(
           failureReason: reason,
           providerStatus: providerStatus ?? payout.providerStatus,
           lastCheckedAt: now,
+          notifySyncAt: now,
           updatedAt: now,
         },
         $push: { history: historyItem("failed", by, now) },
@@ -282,6 +298,7 @@ async function markFailed(
       },
     ]);
   });
+  await notifyPayout(payout._id);
 }
 
 /** Applies what Paystack reported for this payout's transfer. */
@@ -377,12 +394,13 @@ export async function processPayout(payoutId: ObjectId): Promise<void> {
   const claimed = await (await payouts()).findOneAndUpdate(
     { _id: payoutId, status: "requested" },
     {
-      $set: { status: "processing", processingAt: now, updatedAt: now },
+      $set: { status: "processing", processingAt: now, notifySyncAt: now, updatedAt: now },
       $push: { history: historyItem("processing", "processor", now) },
     },
     { returnDocument: "after" },
   );
   if (!claimed) return;
+  await notifyPayout(payoutId);
   await sendTransfer(claimed);
 }
 

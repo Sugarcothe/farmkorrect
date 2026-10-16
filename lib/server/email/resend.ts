@@ -30,7 +30,7 @@ export async function sendEmail(message: {
       cache: "no-store",
     });
     const body = (await res.json().catch(() => null)) as { id?: unknown } | null;
-    if (res.ok && body && typeof body.id === "string") return { delivered: true };
+    if (res.ok && body && typeof body.id === "string") return { delivered: true, messageId: body.id.slice(0, 100) };
     console.error(`[resend] email not accepted (HTTP ${res.status})`);
     return { delivered: false, reason: `http_${res.status}` };
   } catch (error) {

@@ -4,7 +4,7 @@ import { CURRENCY } from "@/lib/wallet/types";
 import type { OrderActor } from "@/lib/orders/types";
 import type { OrderDoc, RefundDoc } from "./models";
 import { syncOrderLedger } from "./order-ledger";
-import { bestEffort, flagOrder, historyItem, orderCollections } from "./order-store";
+import { bestEffort, flagOrder, historyItem, notifyOrder, orderCollections } from "./order-store";
 import {
   createRefund,
   fetchRefund,
@@ -96,7 +96,7 @@ export async function claimOrderRefund(
       $expr: { $gte: [{ $subtract: ["$paidKobo", "$refundedKobo"] }, input.amountKobo] },
     },
     {
-      $set: { ...extraSet, refundInFlight: refund._id, refundPendingKobo: input.amountKobo, ledgerSyncAt: now, updatedAt: now },
+      $set: { ...extraSet, refundInFlight: refund._id, refundPendingKobo: input.amountKobo, ledgerSyncAt: now, notifySyncAt: now, updatedAt: now },
       $push: { history: historyItem("refund_requested", input.by, input.userId, now) },
     },
     { session },
@@ -154,8 +154,9 @@ async function markProcessed(refund: RefundDoc, result: RefundResult | null) {
   if (refund.kind === "late_payment") {
     await orders.updateOne(
       { _id: refund.orderId },
-      { $set: { updatedAt: now }, $push: { history: historyItem("late_payment_refunded", "system", null, now) } },
+      { $set: { notifySyncAt: now, updatedAt: now }, $push: { history: historyItem("late_payment_refunded", "system", null, now) } },
     );
+    await notifyOrder(refund.orderId);
     return;
   }
   // computed in the update itself, so the totals can't drift
@@ -168,12 +169,14 @@ async function markProcessed(refund: RefundDoc, result: RefundResult | null) {
         refundInFlight: null,
         paymentStatus: { $cond: [{ $gte: [refunded, "$paidKobo"] }, "refunded", "partially_refunded"] },
         ledgerSyncAt: now,
+        notifySyncAt: now,
         updatedAt: now,
         history: { $concatArrays: ["$history", [historyItem("refund_processed", "system", null, now)]] },
       },
     },
   ]);
   await bestEffort("ledger sync", () => syncOrderLedger(refund.orderId));
+  await notifyOrder(refund.orderId);
 }
 
 async function markFailed(refund: RefundDoc, providerStatus: string) {
@@ -189,11 +192,12 @@ async function markFailed(refund: RefundDoc, providerStatus: string) {
   await orders.updateOne(
     { _id: refund.orderId, refundInFlight: refund._id },
     {
-      $set: { refundInFlight: null, refundPendingKobo: 0, ledgerSyncAt: now, updatedAt: now },
+      $set: { refundInFlight: null, refundPendingKobo: 0, ledgerSyncAt: now, notifySyncAt: now, updatedAt: now },
       $push: { history: historyItem("refund_failed", "system", null, now) },
     },
   );
   await bestEffort("ledger sync", () => syncOrderLedger(refund.orderId));
+  await notifyOrder(refund.orderId);
 }
 
 async function applyResult(refund: RefundDoc, result: RefundResult) {

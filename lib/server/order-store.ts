@@ -12,6 +12,7 @@ import {
 } from "@/lib/orders/types";
 import { SETTLEMENT_DELAY_MS } from "@/lib/wallet/types";
 import { getDb, getMongoClient } from "./db";
+import { queueNotifications, syncOrderNotifications } from "./notifications";
 import {
   COLLECTIONS,
   type OrderDoc,
@@ -82,6 +83,14 @@ export async function bestEffort(label: string, work: () => Promise<unknown>): P
     console.error(`[orders] ${label} failed; the order job will retry: ${error instanceof Error ? error.name : "unknown"}`);
   }
 }
+
+/**
+ * Turns an order's new history items into notifications once the change has
+ * committed. Every write that adds a notifying history item also sets
+ * notifySyncAt, so if this fails the notification job finishes it.
+ */
+export const notifyOrder = (orderId: ObjectId) =>
+  queueNotifications("order notifications", () => syncOrderNotifications(orderId));
 
 /** Records that an order needs a person to look at it (the first reason is kept). */
 export async function flagOrder(orderId: ObjectId, issue: string) {

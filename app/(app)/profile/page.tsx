@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FormAlert } from "@/components/auth/auth-screen";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { LogOutRow } from "@/components/profile/log-out-row";
 import {
   MenuRowContent,
@@ -45,7 +46,7 @@ export default async function ProfilePage({
 
   return (
     <main className="flex flex-1 flex-col pb-6">
-      <ProfileTopBar title="Profile" />
+      <ProfileTopBar title="Profile" action={<NotificationBell />} />
 
       <section aria-label="Your profile" className="px-5">
         <div className="flex flex-col items-center rounded-3xl bg-white px-5 pt-6 pb-5 text-center shadow-sm ring-1 ring-foreground/5">

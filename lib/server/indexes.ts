@@ -56,6 +56,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
       partialFilterExpression: { current: true },
     },
     { key: { ownerUserId: 1, createdAt: -1 }, name: "owner_history" },
+    // changes whose notifications still have to be created (the notification job's queue)
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
   ],
   [COLLECTIONS.bankVerifications]: [
     { key: { tokenHash: 1 }, name: "token_unique", unique: true },
@@ -86,6 +88,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { userId: 1, createdAt: -1 }, name: "user_recent" },
     // the processing job's queue
     { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
+    // changes whose notifications still have to be created (the notification job's queue)
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
   ],
   [COLLECTIONS.products]: [
     { key: { sellerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "seller_current" },
@@ -103,6 +107,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { ledgerSyncAt: 1 }, name: "ledger_sync", partialFilterExpression: { ledgerSyncAt: { $type: "date" } } },
     // cancelled orders whose stock hasn't been given back yet
     { key: { fulfillmentStatus: 1, "inventory.releasedAt": 1 }, name: "release_queue" },
+    // changes whose notifications still have to be created (the notification job's queue)
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
   ],
   [COLLECTIONS.payments]: [
     { key: { reference: 1 }, name: "reference_unique", unique: true },
@@ -136,6 +142,29 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { productId: 1, status: 1, createdAt: -1 }, name: "product_status" },
     // My Reviews
     { key: { reviewerUserId: 1, createdAt: -1 }, name: "reviewer_recent" },
+    // changes whose notifications still have to be created (the notification job's queue)
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+  ],
+  [COLLECTIONS.notifications]: [
+    // the same event notifies the same person at most once
+    { key: { recipientUserId: 1, eventKey: 1 }, name: "event_unique", unique: true },
+    // the inbox, newest first
+    { key: { recipientUserId: 1, createdAt: -1, _id: -1 }, name: "recipient_recent" },
+    // the unread count and the Unread filter
+    { key: { recipientUserId: 1, readAt: 1, createdAt: -1 }, name: "recipient_unread" },
+    // the category filter
+    { key: { recipientUserId: 1, category: 1, createdAt: -1 }, name: "recipient_category" },
+  ],
+  [COLLECTIONS.notificationDeliveries]: [
+    // one delivery per notification and channel
+    { key: { notificationId: 1, channel: 1 }, name: "notification_channel_unique", unique: true },
+    // the dispatch queue and abandoned claims
+    { key: { state: 1, nextAttemptAt: 1 }, name: "dispatch_queue" },
+    { key: { state: 1, claimedAt: 1 }, name: "claims" },
+  ],
+  [COLLECTIONS.pushSubscriptions]: [
+    { key: { endpointHash: 1 }, name: "endpoint_unique", unique: true },
+    { key: { userId: 1, createdAt: -1 }, name: "user" },
   ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },

@@ -41,6 +41,11 @@ const TEST_ENV: Record<string, string> = {
   PAYSTACK_TRANSFERS_ENABLED: "true",
   PAYOUT_JOB_SECRET: "test-payout-job-secret-at-least-32-chars",
   ORDER_JOB_SECRET: "test-order-job-secret-at-least-32-chars!",
+  NOTIFICATION_JOB_SECRET: "test-notification-job-secret-32-chars!!",
+  // Web Push is off unless a test sets keys (web-push itself is mocked there)
+  WEB_PUSH_VAPID_PUBLIC_KEY: "",
+  WEB_PUSH_VAPID_PRIVATE_KEY: "",
+  WEB_PUSH_SUBJECT: "",
   // no commission policy unless a test sets one
   COMMISSION_POLICY_ID: "",
   COMMISSION_RATE_BPS: "",
