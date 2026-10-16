@@ -1,6 +1,14 @@
 import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
+import type {
+  FulfillmentStatus,
+  OrderActor,
+  OrderEventName,
+  PaymentStatus,
+  ProductCategory,
+  ProductUnit,
+} from "@/lib/orders/types";
 import type { CredentialStatus } from "@/lib/profile/types";
 import type {
   Currency,
@@ -28,6 +36,10 @@ export const COLLECTIONS = {
   walletAccounts: "wallet_accounts",
   payouts: "payouts",
   providerEvents: "provider_events",
+  products: "products",
+  orders: "orders",
+  payments: "payments",
+  refunds: "refunds",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -349,4 +361,164 @@ export type ProviderEventDoc = {
   event: string;
   reference: string | null;
   receivedAt: Date;
+};
+
+// --- market, orders & payments -------------------------------------------------
+
+/** A poultry farmer's product listing. Stock is decremented when it's ordered. */
+export type ProductDoc = {
+  _id: ObjectId;
+  sellerUserId: ObjectId;
+  name: string;
+  category: ProductCategory;
+  description: string;
+  unit: ProductUnit;
+  priceKobo: number;
+  /** units left to sell; never negative */
+  stockQuantity: number;
+  active: boolean;
+  /** set when the seller removes it; kept for the orders that refer to it */
+  archivedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** What was bought, as priced on the server when the order was placed. */
+export type OrderItemDoc = {
+  productId: ObjectId;
+  name: string;
+  unit: ProductUnit;
+  unitPriceKobo: number;
+  quantity: number;
+  lineTotalKobo: number;
+};
+
+export type OrderHistoryDoc = { event: OrderEventName; at: Date; by: OrderActor; userId: ObjectId | null };
+
+/**
+ * An order from one buyer to one seller. Payment and fulfilment are tracked
+ * separately and only change through conditional updates in
+ * lib/server/order-*.ts. `number` (FKO-…) is the order's public reference and
+ * its source id in the ledger.
+ */
+export type OrderDoc = {
+  _id: ObjectId;
+  number: string;
+  buyerUserId: ObjectId;
+  sellerUserId: ObjectId;
+  /** sent by the browser, unique per buyer: a resubmission returns this order */
+  idempotencyKey: string;
+  /** SHA-256 of the items and note, to tell a resubmission from a different order */
+  requestHash: string;
+  buyerName: string;
+  sellerName: string;
+  items: OrderItemDoc[];
+  subtotalKobo: number;
+  totalKobo: number;
+  currency: Currency;
+  deliveryNote: string;
+  paymentStatus: PaymentStatus;
+  fulfillmentStatus: FulfillmentStatus;
+  /** the reference of the payment that paid it */
+  paymentReference: string | null;
+  paidKobo: number;
+  /** refunds Paystack has confirmed */
+  refundedKobo: number;
+  /** the refund being processed, if any (one at a time per order) */
+  refundInFlight: ObjectId | null;
+  refundPendingKobo: number;
+  /** stock is taken when the order is placed and given back at most once */
+  inventory: { reservedAt: Date; expiresAt: Date; releasedAt: Date | null };
+  paidAt: Date | null;
+  processingAt: Date | null;
+  shippedAt: Date | null;
+  /** server time when the seller marked it delivered; starts the 24-hour window */
+  deliveredAt: Date | null;
+  cancelledAt: Date | null;
+  cancelledBy: OrderActor | null;
+  cancelReason: string | null;
+  issue: { reportedAt: Date; note: string; closedAt: Date | null } | null;
+  /**
+   * The commission applied when the seller's earning was recorded. null
+   * until then (including while no commission policy is configured).
+   */
+  settlement: { policyId: string; rateBps: number; grossKobo: number; feeKobo: number; settledAt: Date } | null;
+  /**
+   * Set whenever a change still has to be reflected in the seller's ledger
+   * (payment, delivery, refund, issue); cleared once the ledger matches. The
+   * job retries any that stay set.
+   */
+  ledgerSyncAt: Date | null;
+  /** something needs a person to look at it (e.g. a payment for the wrong amount) */
+  reviewIssue: string | null;
+  history: OrderHistoryDoc[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * - initializing: being created at Paystack (outcome unknown until it answers)
+ * - open: the buyer has a checkout link
+ * - success / failed: Paystack's final answer
+ * - superseded: never reached the buyer; replaced by a new attempt
+ * - closed: the order was cancelled before it was paid
+ */
+export type PaymentAttemptStatus = "initializing" | "open" | "success" | "failed" | "superseded" | "closed";
+
+/** One attempt to collect an order's total through Paystack. */
+export type PaymentDoc = {
+  _id: ObjectId;
+  orderId: ObjectId;
+  buyerUserId: ObjectId;
+  /** fko_<payment id>: the Paystack transaction reference */
+  reference: string;
+  amountKobo: number;
+  currency: Currency;
+  status: PaymentAttemptStatus;
+  /** true while the attempt can still be paid; at most one per order */
+  active: boolean;
+  authorizationUrl: string | null;
+  providerStatus: string | null;
+  providerTransactionId: number | null;
+  paidAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * - creating: sent to Paystack, outcome unknown until it answers or is found
+ * - pending: Paystack accepted it and is processing it
+ * - processed / failed: Paystack's final answer
+ */
+export type RefundStatus = "creating" | "pending" | "processed" | "failed";
+
+/**
+ * Money returned to a buyer through Paystack. "order" refunds come out of
+ * the order's paid total (and the seller's earning); "late_payment" returns a
+ * payment that arrived after its order was closed and never counted.
+ */
+export type RefundDoc = {
+  _id: ObjectId;
+  orderId: ObjectId;
+  kind: "order" | "late_payment";
+  /** fkr_<refund id>: our reference, also the ledger refund id */
+  reference: string;
+  paymentReference: string;
+  amountKobo: number;
+  currency: Currency;
+  reason: string;
+  requestedBy: OrderActor;
+  requestedByUserId: ObjectId | null;
+  /** from the seller's refund form, unique per order */
+  idempotencyKey: string | null;
+  status: RefundStatus;
+  providerRefundId: number | null;
+  providerStatus: string | null;
+  sentAt: Date | null;
+  processedAt: Date | null;
+  failedAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };

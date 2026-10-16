@@ -87,6 +87,48 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // the processing job's queue
     { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
   ],
+  [COLLECTIONS.products]: [
+    { key: { sellerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "seller_current" },
+    // the Market: listed products, newest first
+    { key: { active: 1, archivedAt: 1, createdAt: -1 }, name: "market" },
+  ],
+  [COLLECTIONS.orders]: [
+    { key: { number: 1 }, name: "number_unique", unique: true },
+    { key: { buyerUserId: 1, idempotencyKey: 1 }, name: "idempotency_unique", unique: true },
+    { key: { buyerUserId: 1, createdAt: -1 }, name: "buyer_recent" },
+    { key: { sellerUserId: 1, createdAt: -1 }, name: "seller_recent" },
+    // the job's queues: unpaid orders to expire, paid orders to settle
+    { key: { paymentStatus: 1, "inventory.expiresAt": 1 }, name: "unpaid_expiry" },
+    { key: { settlement: 1, paidAt: 1 }, name: "unsettled", partialFilterExpression: { paidAt: { $type: "date" } } },
+    { key: { ledgerSyncAt: 1 }, name: "ledger_sync", partialFilterExpression: { ledgerSyncAt: { $type: "date" } } },
+    // cancelled orders whose stock hasn't been given back yet
+    { key: { fulfillmentStatus: 1, "inventory.releasedAt": 1 }, name: "release_queue" },
+  ],
+  [COLLECTIONS.payments]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    // one payable attempt per order at a time
+    { key: { orderId: 1 }, name: "one_active_per_order", unique: true, partialFilterExpression: { active: true } },
+    { key: { orderId: 1, createdAt: -1 }, name: "order_recent" },
+    { key: { active: 1, updatedAt: 1 }, name: "active_queue" },
+  ],
+  [COLLECTIONS.refunds]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    { key: { orderId: 1, createdAt: 1 }, name: "order" },
+    {
+      key: { orderId: 1, idempotencyKey: 1 },
+      name: "idempotency_unique",
+      unique: true,
+      partialFilterExpression: { idempotencyKey: { $type: "string" } },
+    },
+    // a payment that arrived late is returned once
+    {
+      key: { paymentReference: 1 },
+      name: "one_late_refund_per_payment",
+      unique: true,
+      partialFilterExpression: { kind: "late_payment" },
+    },
+    { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
+  ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
   ],

@@ -5,11 +5,15 @@ import {
   type FarmDoc,
   type FulfillmentDoc,
   type LedgerEntryDoc,
+  type OrderDoc,
   type OtpChallengeDoc,
   type PayoutAccountDoc,
+  type PaymentDoc,
   type PayoutDoc,
+  type ProductDoc,
   type ProviderEventDoc,
   type PasswordResetDoc,
+  type RefundDoc,
   type ServiceDoc,
   type SessionDoc,
   type UserDoc,
@@ -33,6 +37,10 @@ export async function collections() {
     wallets: db.collection<WalletAccountDoc>(COLLECTIONS.walletAccounts),
     payouts: db.collection<PayoutDoc>(COLLECTIONS.payouts),
     providerEvents: db.collection<ProviderEventDoc>(COLLECTIONS.providerEvents),
+    products: db.collection<ProductDoc>(COLLECTIONS.products),
+    orders: db.collection<OrderDoc>(COLLECTIONS.orders),
+    orderPayments: db.collection<PaymentDoc>(COLLECTIONS.payments),
+    refunds: db.collection<RefundDoc>(COLLECTIONS.refunds),
   };
 }
 

@@ -176,6 +176,59 @@ export function getPayoutJobSecret(): string | null {
   return secret;
 }
 
+/**
+ * Whether buyers can pay for orders through Paystack. Needs a secret key; a
+ * live key is refused outside production, so a local or preview deployment
+ * can never take a real customer's money.
+ */
+export function getPaymentConfig(): { enabled: boolean } {
+  const paystack = getPaystackConfig();
+  if (!paystack) return { enabled: false };
+  if (paystack.mode === "live" && process.env.NODE_ENV !== "production")
+    throw new ConfigError("A live Paystack key can only collect payments in production.");
+  return { enabled: true };
+}
+
+export type CommissionPolicy = {
+  /** a name for this policy, stored on every order it's applied to (e.g. "2026-11-standard") */
+  id: string;
+  /** the platform's share of an order's item subtotal, in basis points (250 = 2.5%) */
+  rateBps: number;
+};
+
+/** The highest rate accepted (50%): anything above is almost certainly a typo. */
+export const MAX_COMMISSION_BPS = 5_000;
+
+/**
+ * The platform commission, or null while none has been decided. There is
+ * deliberately no default: until COMMISSION_POLICY_ID and
+ * COMMISSION_RATE_BPS are both set, payments are still collected but sellers'
+ * earnings aren't recorded (settlement waits for a policy).
+ */
+export function getCommissionPolicy(): CommissionPolicy | null {
+  const id = read("COMMISSION_POLICY_ID");
+  const rate = read("COMMISSION_RATE_BPS");
+  if (!id && !rate) return null;
+  if (!id || !rate) throw new ConfigError("COMMISSION_POLICY_ID and COMMISSION_RATE_BPS must be set together.");
+  if (!/^[A-Za-z0-9._-]{1,40}$/.test(id))
+    throw new ConfigError("COMMISSION_POLICY_ID may only contain letters, digits, ., _ and - (up to 40).");
+  if (!/^\d{1,5}$/.test(rate) || Number(rate) > MAX_COMMISSION_BPS)
+    throw new ConfigError(`COMMISSION_RATE_BPS must be a whole number of basis points from 0 to ${MAX_COMMISSION_BPS}.`);
+  return { id, rateBps: Number(rate) };
+}
+
+/**
+ * Bearer secret for the internal order endpoints (the scheduled job that
+ * expires unpaid orders and reconciles payments and refunds, and closing a
+ * reported issue). null leaves them switched off.
+ */
+export function getOrderJobSecret(): string | null {
+  const secret = read("ORDER_JOB_SECRET");
+  if (!secret) return null;
+  if (secret.length < 32) throw new ConfigError("ORDER_JOB_SECRET must be at least 32 characters long.");
+  return secret;
+}
+
 /** null when email delivery hasn't been configured */
 export function getResendConfig(): ResendConfig | null {
   const apiKey = read("RESEND_API_KEY");

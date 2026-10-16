@@ -3,12 +3,17 @@ import { hashToken } from "@/lib/server/crypto";
 import { getDb } from "@/lib/server/db";
 import { clientIp, HttpError, ok, readLimitedBody, route, tooManyRequests } from "@/lib/server/http";
 import { COLLECTIONS, type ProviderEventDoc } from "@/lib/server/models";
+import { handleChargeEvent, PAYMENT_REFERENCE } from "@/lib/server/order-payments";
+import { handleRefundEvent } from "@/lib/server/order-refunds";
 import { handleTransferEvent, isTransferEvent } from "@/lib/server/payouts";
 import { isPaystackConfigured, isValidWebhookSignature, parseTransfer, type Json } from "@/lib/server/paystack";
 import { hit } from "@/lib/server/rate-limit";
 
-// Paystack's event notifications. Only transfer events are used: they settle
-// payouts. The signature is checked on the exact raw bytes before anything
+// Paystack's event notifications: transfer events settle payouts,
+// charge.success settles an order payment and refund.* settles an order
+// refund. Charge and refund events are only a prompt: the payment or refund
+// is then looked up with Paystack's API and checked against the order, so
+// the event's own amounts are never trusted. The signature is checked on the exact raw bytes before anything
 // is parsed; unsigned or tampered requests get 401 and change nothing.
 // An event is recorded once applied, so a redelivery is acknowledged without
 // being applied again (applying twice would be harmless anyway). If the
@@ -37,21 +42,41 @@ export const POST = route("webhooks/paystack", async (request) => {
     throw new HttpError(400, "Invalid payload.");
   }
   const event = isObject(payload) && typeof payload.event === "string" ? payload.event : "";
-  if (!isTransferEvent(event)) return ok({ received: true });
+  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
+  const kind = isTransferEvent(event)
+    ? "transfer"
+    : event === "charge.success"
+      ? "charge"
+      : event.startsWith("refund.")
+        ? "refund"
+        : null;
+  if (!kind) return ok({ received: true });
 
   const events = (await getDb()).collection<ProviderEventDoc>(COLLECTIONS.providerEvents);
   const id = hashToken(raw.toString("utf8"));
   if (await events.findOne({ _id: id })) return ok({ received: true });
 
-  const data = isObject(payload) && isObject(payload.data) ? payload.data : null;
-  const transfer = data ? parseTransfer(data) : null;
-  if (!transfer) {
-    console.error(`[webhooks/paystack] ${event}: unexpected payload`);
-    return ok({ received: true });
+  let reference: string | null = null;
+  if (kind === "transfer") {
+    const transfer = data ? parseTransfer(data) : null;
+    if (!transfer) {
+      console.error(`[webhooks/paystack] ${event}: unexpected payload`);
+      return ok({ received: true });
+    }
+    await handleTransferEvent(event, transfer);
+    reference = transfer.reference;
+  } else {
+    // our payment reference: data.reference on a charge, data.transaction_reference on a refund
+    const field = kind === "charge" ? "reference" : "transaction_reference";
+    const value = data && typeof data[field] === "string" ? data[field] : "";
+    // events for payments made outside the Market aren't ours
+    if (!PAYMENT_REFERENCE.test(value)) return ok({ received: true });
+    if (kind === "charge") await handleChargeEvent(value);
+    else await handleRefundEvent(value);
+    reference = value;
   }
-  await handleTransferEvent(event, transfer);
   try {
-    await events.insertOne({ _id: id, event, reference: transfer.reference, receivedAt: new Date() });
+    await events.insertOne({ _id: id, event, reference, receivedAt: new Date() });
   } catch (error) {
     // the same delivery was handled in parallel
     if (!(error instanceof MongoServerError && error.code === 11000)) throw error;
