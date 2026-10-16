@@ -3,8 +3,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { ConfigError, getPaystackConfig, type PaystackConfig } from "./config";
 
 // A small client for the Paystack calls the app makes: the bank list,
-// account-name resolution and transfer recipients (bank details), and
-// transfers, their verification and webhook signatures (payouts). Requests
+// account-name resolution and transfer recipients (bank details), transfers
+// and their verification (payouts), transactions and refunds (order
+// payments), and webhook signatures. Requests
 // are made from the server with the secret key, which never leaves it.
 // Responses are validated field by field; nothing from Paystack is logged
 // (only the operation and HTTP status) or passed on as-is.
@@ -308,6 +309,225 @@ export async function verifyTransfer(reference: string): Promise<TransferResult 
   const transfer = parseTransfer(body.data);
   if (!transfer || transfer.reference !== reference) throw unexpected("transfer verification (malformed)", status);
   return transfer;
+}
+
+// --- collecting payments ---------------------------------------------------------
+
+/** What a Paystack transaction status means for an order payment. */
+export type TransactionOutcome = "success" | "failed" | "pending";
+
+const TRANSACTION_OUTCOMES: Record<string, TransactionOutcome> = {
+  success: "success",
+  failed: "failed",
+  reversed: "failed",
+  // the checkout page was opened but not completed: it can still be paid
+  abandoned: "pending",
+  ongoing: "pending",
+  pending: "pending",
+  processing: "pending",
+  queued: "pending",
+};
+
+/** An unknown status is never treated as paid or failed. */
+export function transactionOutcome(status: string): TransactionOutcome {
+  return Object.hasOwn(TRANSACTION_OUTCOMES, status) ? TRANSACTION_OUTCOMES[status] : "pending";
+}
+
+export type NewTransaction = {
+  email: string;
+  amountKobo: number;
+  /** our reference (fko_…), stable for this payment attempt */
+  reference: string;
+  callbackUrl: string;
+  /** our order id and number, echoed back by verification */
+  orderId: string;
+  orderNumber: string;
+};
+
+/** Only Paystack's own checkout pages are ever handed to the browser. */
+function isCheckoutUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 500) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "paystack.com" || url.hostname.endsWith(".paystack.com"));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Starts a payment and returns the checkout page for the buyer. Nothing is
+ * charged until the buyer completes that page, and completion is only ever
+ * confirmed with verifyTransaction.
+ *
+ * - PaystackError "rejected": Paystack refused it (no transaction exists)
+ * - PaystackError "unavailable": it may or may not exist; check with
+ *   verifyTransaction before starting another
+ */
+export async function initializeTransaction(input: NewTransaction): Promise<{ authorizationUrl: string }> {
+  const { status, body } = await paystack("transaction initialization", "/transaction/initialize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: input.email,
+      amount: input.amountKobo,
+      currency: "NGN",
+      reference: input.reference,
+      callback_url: input.callbackUrl,
+      metadata: { order_id: input.orderId, order_number: input.orderNumber },
+    }),
+  });
+  if (isRejection(status, body)) throw new PaystackError("rejected");
+  if (status !== 200 || body?.status !== true || !isObject(body.data)) throw unexpected("transaction initialization", status);
+  const { authorization_url: url, reference } = body.data;
+  if (!isCheckoutUrl(url) || reference !== input.reference) throw unexpected("transaction initialization (malformed)", status);
+  return { authorizationUrl: url };
+}
+
+export type TransactionResult = {
+  status: string;
+  reference: string;
+  amountKobo: number;
+  currency: string;
+  transactionId: number | null;
+  paidAt: Date | null;
+  /** the order id we sent in the metadata, if it came back */
+  orderId: string | null;
+};
+
+function parseMetadata(value: unknown): Json | null {
+  if (isObject(value)) return value;
+  // Paystack sometimes returns metadata as a JSON string
+  if (typeof value === "string" && value.length < 4_000) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return isObject(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Validates the transaction object in a verification response. */
+export function parseTransaction(data: Json): TransactionResult | null {
+  const { status, reference, amount, currency, id } = data;
+  if (typeof status !== "string" || !/^[a-z_]{1,30}$/.test(status)) return null;
+  if (typeof reference !== "string" || typeof amount !== "number" || !Number.isSafeInteger(amount) || amount < 0) return null;
+  if (typeof currency !== "string" || !/^[A-Z]{3}$/.test(currency)) return null;
+  const paidAt = typeof data.paid_at === "string" ? new Date(data.paid_at) : null;
+  const orderId = parseMetadata(data.metadata)?.order_id;
+  return {
+    status,
+    reference,
+    amountKobo: amount,
+    currency,
+    transactionId: typeof id === "number" && Number.isSafeInteger(id) ? id : null,
+    paidAt: paidAt && !Number.isNaN(paidAt.getTime()) ? paidAt : null,
+    orderId: typeof orderId === "string" ? orderId : null,
+  };
+}
+
+/** The transaction with our reference, or null if Paystack has none. */
+export async function verifyTransaction(reference: string): Promise<TransactionResult | null> {
+  const { status, body } = await paystack(
+    "transaction verification",
+    `/transaction/verify/${encodeURIComponent(reference)}`,
+  );
+  if (status === 404 || (status === 400 && body?.status === false)) return null;
+  if (status !== 200 || body?.status !== true || !isObject(body.data)) throw unexpected("transaction verification", status);
+  const transaction = parseTransaction(body.data);
+  if (!transaction || transaction.reference !== reference) throw unexpected("transaction verification (malformed)", status);
+  return transaction;
+}
+
+// --- refunds ---------------------------------------------------------------------
+
+export type RefundOutcome = "processed" | "failed" | "pending";
+
+/** Anything but Paystack's final "processed" or "failed" is still in progress. */
+export function refundOutcome(status: string): RefundOutcome {
+  if (status === "processed") return "processed";
+  if (status === "failed") return "failed";
+  return "pending";
+}
+
+export type RefundResult = {
+  id: number;
+  status: string;
+  amountKobo: number;
+  /** the refunded transaction's Paystack id, when given */
+  transactionId: number | null;
+};
+
+function parseRefund(data: Json): RefundResult | null {
+  const { id, status, amount, currency } = data;
+  if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) return null;
+  if (typeof status !== "string" || !/^[a-z_-]{1,30}$/.test(status)) return null;
+  if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) return null;
+  if (currency !== undefined && currency !== "NGN") return null;
+  const transaction = isObject(data.transaction) ? data.transaction.id : data.transaction;
+  return {
+    id,
+    status,
+    amountKobo: amount,
+    transactionId: typeof transaction === "number" && Number.isSafeInteger(transaction) ? transaction : null,
+  };
+}
+
+/**
+ * Returns part or all of a successful payment to the buyer. Paystack doesn't
+ * take our own reference for a refund, so callers must not send another
+ * one for the same request until this one is found (see listRefunds).
+ *
+ * - PaystackError "rejected": Paystack refused it (no refund was made)
+ * - PaystackError "unavailable": the outcome is unknown
+ */
+export async function createRefund(input: {
+  transactionReference: string;
+  amountKobo: number;
+  note: string;
+}): Promise<RefundResult> {
+  const { status, body } = await paystack("refund", "/refund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      transaction: input.transactionReference,
+      amount: input.amountKobo,
+      currency: "NGN",
+      merchant_note: input.note,
+    }),
+  });
+  if (isRejection(status, body)) throw new PaystackError("rejected");
+  if ((status !== 200 && status !== 201) || body?.status !== true || !isObject(body.data)) throw unexpected("refund", status);
+  const refund = parseRefund(body.data);
+  if (!refund || refund.amountKobo !== input.amountKobo) throw unexpected("refund (malformed)", status);
+  return refund;
+}
+
+/** One refund by its Paystack id, or null if Paystack has none. */
+export async function fetchRefund(id: number): Promise<RefundResult | null> {
+  const { status, body } = await paystack("refund lookup", `/refund/${id}`);
+  if (status === 404 || (status === 400 && body?.status === false)) return null;
+  if (status !== 200 || body?.status !== true || !isObject(body.data)) throw unexpected("refund lookup", status);
+  const refund = parseRefund(body.data);
+  if (!refund || refund.id !== id) throw unexpected("refund lookup (malformed)", status);
+  return refund;
+}
+
+/** The refunds Paystack has for one transaction (by its Paystack id). */
+export async function listRefunds(transactionId: number): Promise<RefundResult[]> {
+  const query = new URLSearchParams({ transaction: String(transactionId), perPage: "100" });
+  const { status, body } = await paystack("refund list", `/refund?${query}`);
+  if (status !== 200 || body?.status !== true || !Array.isArray(body.data)) throw unexpected("refund list", status);
+  const refunds: RefundResult[] = [];
+  for (const item of body.data) {
+    const refund = isObject(item) ? parseRefund(item) : null;
+    if (!refund) throw unexpected("refund list (malformed)", status);
+    // only this transaction's refunds count, whatever the filter returned
+    if (refund.transactionId === transactionId) refunds.push(refund);
+  }
+  return refunds;
 }
 
 // --- webhooks ------------------------------------------------------------------

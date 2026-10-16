@@ -13,9 +13,46 @@ export type PaystackBehaviour =
   | "malformed"
   | "timeout"
   | "unauthorized"
-  // transfers only: Paystack creates the transfer, but the response never arrives
+  // transfers, checkouts and refunds: Paystack creates it, but the response never arrives
   | "timeout-after-create";
-type Operation = "banks" | "resolve" | "recipient" | "transfer" | "verify";
+type Operation =
+  | "banks"
+  | "resolve"
+  | "recipient"
+  | "transfer"
+  | "verify"
+  | "initialize"
+  | "transaction"
+  | "refund"
+  | "refundFetch"
+  | "refundList";
+
+const OK_BEHAVIOUR: Record<Operation, PaystackBehaviour> = {
+  banks: "ok",
+  resolve: "ok",
+  recipient: "ok",
+  transfer: "ok",
+  verify: "ok",
+  initialize: "ok",
+  transaction: "ok",
+  refund: "ok",
+  refundFetch: "ok",
+  refundList: "ok",
+};
+
+/** A checkout Paystack holds (amount in kobo), by reference. */
+export type FakeTransaction = {
+  id: number;
+  reference: string;
+  amount: number;
+  currency: string;
+  email: string;
+  status: string;
+  metadata: unknown;
+  paid_at: string | null;
+};
+
+export type FakeRefund = { id: number; transaction: number; amount: number; status: string; reference: string };
 
 export type FakeTransfer = { reference: string; amount: number; recipient: string; status: string; transfer_code: string };
 
@@ -33,16 +70,19 @@ export const BANKS = [
 export const paystack = {
   /** registered account names, by `${bankCode}:${accountNumber}` */
   accounts: new Map<string, string>(),
-  behaviour: { banks: "ok", resolve: "ok", recipient: "ok", transfer: "ok", verify: "ok" } as Record<
-    Operation,
-    PaystackBehaviour
-  >,
+  behaviour: { ...OK_BEHAVIOUR },
   /** transfers Paystack holds, by reference */
   transfers: new Map<string, FakeTransfer>(),
   /** the status a new transfer gets */
   newTransferStatus: "success",
   /** recipients created, by `${bankCode}:${accountNumber}` (Paystack returns the existing one for a duplicate) */
   recipients: new Map<string, { code: string; name: string; metadata: unknown }>(),
+  /** checkouts started, by our reference */
+  transactions: new Map<string, FakeTransaction>(),
+  /** refunds made, by Paystack id */
+  refunds: new Map<number, FakeRefund>(),
+  /** the status a new refund gets */
+  newRefundStatus: "processed",
   requests: [] as { operation: Operation; method: string; url: string; authorization: string | null; body: unknown }[],
   /** bank list pages served (to check caching) */
   bankListCalls: 0,
@@ -52,7 +92,10 @@ export function resetPaystack() {
   paystack.accounts.clear();
   paystack.accounts.set("057:0123456789", "ADAEZE OKAFOR");
   paystack.accounts.set("044:1234567890", "ADAEZE  CHIOMA OKAFOR");
-  paystack.behaviour = { banks: "ok", resolve: "ok", recipient: "ok", transfer: "ok", verify: "ok" };
+  paystack.behaviour = { ...OK_BEHAVIOUR };
+  paystack.transactions.clear();
+  paystack.refunds.clear();
+  paystack.newRefundStatus = "processed";
   paystack.transfers.clear();
   paystack.newTransferStatus = "success";
   paystack.recipients.clear();
@@ -92,7 +135,17 @@ export async function fakePaystack(url: URL, init: RequestInit = {}): Promise<Re
             ? "transfer"
             : url.pathname.startsWith("/transfer/verify/")
               ? "verify"
-              : null;
+              : url.pathname === "/transaction/initialize"
+                ? "initialize"
+                : url.pathname.startsWith("/transaction/verify/")
+                  ? "transaction"
+                  : url.pathname === "/refund"
+                    ? method === "POST"
+                      ? "refund"
+                      : "refundList"
+                    : url.pathname.startsWith("/refund/")
+                      ? "refundFetch"
+                      : null;
   if (!operation) throw new Error(`Unexpected Paystack request in tests: ${url.pathname}`);
   const body = init.body ? JSON.parse(String(init.body)) : undefined;
   paystack.requests.push({ operation, method, url: url.toString(), authorization: headers.get("authorization"), body });
@@ -126,6 +179,24 @@ export async function fakePaystack(url: URL, init: RequestInit = {}): Promise<Re
   }
 
   if (operation === "transfer") return fakeTransfer(method, body, behaviour);
+  if (operation === "initialize") return fakeInitialize(body, behaviour);
+  if (operation === "transaction") {
+    if (behaviour === "malformed") return json({ status: true, data: { reference: 42 } });
+    const transaction = paystack.transactions.get(decodeURIComponent(url.pathname.slice("/transaction/verify/".length)));
+    if (!transaction) return json({ status: false, message: "Transaction reference not found" }, 400);
+    return json({ status: true, message: "Verification successful", data: transactionData(transaction) });
+  }
+  if (operation === "refund") return fakeRefund(body, behaviour);
+  if (operation === "refundFetch") {
+    const refund = paystack.refunds.get(Number(url.pathname.slice("/refund/".length)));
+    if (!refund) return json({ status: false, message: "Refund not found" }, 404);
+    return json({ status: true, message: "Refund retrieved", data: refundData(refund) });
+  }
+  if (operation === "refundList") {
+    const id = Number(url.searchParams.get("transaction"));
+    const list = [...paystack.refunds.values()].filter((r) => r.transaction === id);
+    return json({ status: true, message: "Refunds retrieved", data: list.map(refundData) });
+  }
   if (operation === "verify") {
     if (behaviour === "malformed") return json({ status: true, data: { reference: 42 } });
     const transfer = paystack.transfers.get(decodeURIComponent(url.pathname.slice("/transfer/verify/".length)));
@@ -203,4 +274,100 @@ function fakeTransfer(method: string, body: unknown, behaviour: PaystackBehaviou
 export function signedTransferEvent(event: string, transfer: FakeTransfer, key = TEST_PAYSTACK_KEY) {
   const raw = JSON.stringify({ event, data: transferData(transfer) });
   return { raw, signature: createHmac("sha512", key).update(raw).digest("hex") };
+}
+
+// --- checkouts and refunds -------------------------------------------------------
+
+let nextId = 4_000_000;
+
+function fakeInitialize(body: unknown, behaviour: PaystackBehaviour): Response {
+  const input = body as { email: string; amount: number; currency: string; reference: string; callback_url: string; metadata: unknown };
+  if (behaviour === "reject") return json({ status: false, message: "Invalid email" }, 400);
+  if (behaviour === "malformed")
+    return json({ status: true, data: { authorization_url: "https://evil.example/pay", reference: input.reference } });
+  if (paystack.transactions.has(input.reference)) return json({ status: false, message: "Duplicate Transaction Reference" }, 400);
+  paystack.transactions.set(input.reference, {
+    id: ++nextId,
+    reference: input.reference,
+    amount: input.amount,
+    currency: input.currency,
+    email: input.email,
+    status: "abandoned",
+    metadata: input.metadata,
+    paid_at: null,
+  });
+  if (behaviour === "timeout-after-create") return failure("timeout")!;
+  return json({
+    status: true,
+    message: "Authorization URL created",
+    data: {
+      authorization_url: `https://checkout.paystack.com/${input.reference.slice(-10)}`,
+      access_code: `ac_${input.reference.slice(-10)}`,
+      reference: input.reference,
+    },
+  });
+}
+
+function transactionData(t: FakeTransaction) {
+  return {
+    id: t.id,
+    status: t.status,
+    reference: t.reference,
+    amount: t.amount,
+    currency: t.currency,
+    paid_at: t.paid_at,
+    metadata: t.metadata,
+    customer: { email: t.email },
+  };
+}
+
+/** The buyer completes (or fails) the checkout page; overrides simulate a tampered transaction. */
+export function completeCheckout(reference: string, status = "success", overrides: Partial<FakeTransaction> = {}) {
+  const transaction = paystack.transactions.get(reference);
+  if (!transaction) throw new Error(`No checkout was started for ${reference}`);
+  Object.assign(transaction, { status, paid_at: status === "success" ? new Date().toISOString() : null }, overrides);
+  return transaction;
+}
+
+function fakeRefund(body: unknown, behaviour: PaystackBehaviour): Response {
+  const input = body as { transaction: string; amount: number; currency: string; merchant_note: string };
+  if (behaviour === "reject") return json({ status: false, message: "Transaction has been fully reversed" }, 400);
+  const transaction = paystack.transactions.get(input.transaction);
+  if (!transaction || transaction.status !== "success") return json({ status: false, message: "Transaction not found" }, 400);
+  const refunded = [...paystack.refunds.values()]
+    .filter((r) => r.transaction === transaction.id && r.status !== "failed")
+    .reduce((sum, r) => sum + r.amount, 0);
+  if (input.amount > transaction.amount - refunded)
+    return json({ status: false, message: "Refund amount cannot be greater than transaction amount" }, 400);
+  const refund: FakeRefund = {
+    id: ++nextId,
+    transaction: transaction.id,
+    amount: input.amount,
+    status: paystack.newRefundStatus,
+    reference: transaction.reference,
+  };
+  paystack.refunds.set(refund.id, refund);
+  if (behaviour === "timeout-after-create") return failure("timeout")!;
+  return json({ status: true, message: "Refund has been queued for processing", data: refundData(refund) });
+}
+
+function refundData(r: FakeRefund) {
+  return { id: r.id, transaction: { id: r.transaction, reference: r.reference }, amount: r.amount, currency: "NGN", status: r.status };
+}
+
+const sign = (raw: string, key: string) => createHmac("sha512", key).update(raw).digest("hex");
+
+/** A charge.success webhook body for a checkout, and its valid signature. */
+export function signedChargeEvent(transaction: FakeTransaction, key = TEST_PAYSTACK_KEY) {
+  const raw = JSON.stringify({ event: "charge.success", data: transactionData(transaction) });
+  return { raw, signature: sign(raw, key) };
+}
+
+/** A refund.* webhook body, and its valid signature. */
+export function signedRefundEvent(event: string, refund: FakeRefund, key = TEST_PAYSTACK_KEY) {
+  const raw = JSON.stringify({
+    event,
+    data: { id: refund.id, status: refund.status, amount: refund.amount, currency: "NGN", transaction_reference: refund.reference },
+  });
+  return { raw, signature: sign(raw, key) };
 }

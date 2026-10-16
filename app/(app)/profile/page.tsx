@@ -9,10 +9,11 @@ import {
   ProfileTopBar,
   VerificationBadge,
 } from "@/components/profile/profile-parts";
-import { Icon } from "@/components/ui/icons";
+import { Icon, type IconName } from "@/components/ui/icons";
 import { FARM_TYPE_LABELS } from "@/lib/auth/types";
 import { PROFILE_CONFIG, SECTION_INFO, specializationLabel } from "@/lib/profile/config";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
+import { SELLER_ROLE } from "@/lib/server/products";
 import { getProfile } from "@/lib/server/profile";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -26,6 +27,15 @@ export default async function ProfilePage({
   const profile = await getProfile(user);
   const config = PROFILE_CONFIG[profile.role];
   const justSaved = (await searchParams).updated === "1";
+  const marketRows: { href: string; label: string; icon: IconName }[] = [
+    { href: "/orders", label: "My Orders", icon: "list" },
+    ...(profile.role === SELLER_ROLE
+      ? [
+          { href: "/market/listings", label: "My Listings", icon: "store" as const },
+          { href: "/sales", label: "Sales", icon: "wallet" as const },
+        ]
+      : [{ href: "/market", label: "Market", icon: "store" as const }]),
+  ];
 
   const specialization = specializationLabel(profile.role, profile.specialization);
   const years =
@@ -86,6 +96,13 @@ export default async function ProfilePage({
               <MenuRowContent icon="pencil" label="Edit Profile" />
             </Link>
           </li>
+          {marketRows.map((row) => (
+            <li key={row.href}>
+              <Link href={row.href} className={menuRowClass}>
+                <MenuRowContent icon={row.icon} label={row.label} />
+              </Link>
+            </li>
+          ))}
           {config.sections.map((section) => (
             <li key={section}>
               <Link href={`/profile/${section}`} className={menuRowClass}>

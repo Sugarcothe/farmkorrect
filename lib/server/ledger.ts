@@ -37,13 +37,15 @@ import {
 // again on a fresh snapshot that includes the other's entries. This is what
 // makes "check the balance, then hold the funds" safe.
 //
-// FOUNDATION BOUNDARY: the app doesn't have orders, payments, delivery
-// confirmation or refunds yet. recordEarning, recordDelivery, recordRefund and
-// the dispute functions below are the server-side entry points those future
-// modules must call (from trusted code such as a verified payment webhook),
-// and they are deliberately not exposed through any API route. There is no
-// platform commission rule either: the fee is whatever the trusted caller
-// passes, and nothing here invents a rate.
+// ENTRY POINTS: recordEarning, recordDelivery, recordRefund and the dispute
+// functions below are called only from trusted server code, never from an
+// API route directly. Market orders (lib/server/order-ledger.ts) call them
+// after a payment is verified with Paystack, a seller marks delivery, a
+// refund is confirmed or a buyer reports a problem. The platform fee is
+// whatever that trusted caller passes; the order module takes it from the
+// configured commission policy (COMMISSION_POLICY_ID / COMMISSION_RATE_BPS)
+// and records no earning at all while none is configured. Nothing here
+// invents a rate.
 
 // --- what each entry type does -------------------------------------------------
 

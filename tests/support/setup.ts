@@ -40,6 +40,10 @@ const TEST_ENV: Record<string, string> = {
   // on against the fake Paystack; tests switch it off where needed
   PAYSTACK_TRANSFERS_ENABLED: "true",
   PAYOUT_JOB_SECRET: "test-payout-job-secret-at-least-32-chars",
+  ORDER_JOB_SECRET: "test-order-job-secret-at-least-32-chars!",
+  // no commission policy unless a test sets one
+  COMMISSION_POLICY_ID: "",
+  COMMISSION_RATE_BPS: "",
 };
 
 let replSet: MongoMemoryReplSet;
