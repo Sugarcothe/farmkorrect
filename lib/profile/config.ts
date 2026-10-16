@@ -43,7 +43,8 @@ export const SECTION_INFO: Record<ProfileSection, { title: string; icon: MenuIco
   reviews: {
     title: "My Reviews",
     icon: "star",
-    blurb: "Reviews from farmers you've worked with will appear here once bookings open.",
+    blurb: "Reviews you've written for products you bought on the Market.",
+    ready: true,
   },
   services: {
     title: "Services & Pricing",
@@ -145,7 +146,7 @@ export const PROFILE_CONFIG: Record<Role, RoleProfileConfig> = {
       "birdCount",
       "yearsOfExperience",
     ],
-    sections: ["services", "bank-details", "notifications", "security", "help"],
+    sections: ["reviews", "services", "bank-details", "notifications", "security", "help"],
     tabs: FARMER_TABS,
     hasCredential: false,
   },

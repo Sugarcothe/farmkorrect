@@ -10,6 +10,7 @@ import type {
   ProductUnit,
 } from "@/lib/orders/types";
 import type { CredentialStatus } from "@/lib/profile/types";
+import type { ReviewStatus } from "@/lib/reviews/types";
 import type {
   Currency,
   EarningSourceType,
@@ -40,6 +41,7 @@ export const COLLECTIONS = {
   orders: "orders",
   payments: "payments",
   refunds: "refunds",
+  reviews: "reviews",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -519,6 +521,36 @@ export type RefundDoc = {
   processedAt: Date | null;
   failedAt: Date | null;
   lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+// --- reviews ---------------------------------------------------------------------
+
+/**
+ * A customer's review of a product they bought. One per customer per
+ * product (a unique index); this collection is the only record of ratings,
+ * and every average or count shown is computed from it. The reviewer, seller,
+ * order and verifiedPurchase are set on the server when it's created and
+ * never change; edits only touch rating, text, editedAt and updatedAt.
+ */
+export type ReviewDoc = {
+  _id: ObjectId;
+  productId: ObjectId;
+  sellerUserId: ObjectId;
+  reviewerUserId: ObjectId;
+  /** the delivered order the review rests on */
+  orderId: ObjectId;
+  /** the position of the product in that order's items (items have no id of their own) */
+  orderItemIndex: number;
+  /** a whole number from 1 to 5 */
+  rating: number;
+  text: string;
+  status: ReviewStatus;
+  /** derived from a paid, delivered order; an edit never sets it */
+  verifiedPurchase: boolean;
+  editedAt: Date | null;
+  withdrawnAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
