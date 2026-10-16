@@ -3,17 +3,43 @@ import { notFound } from "next/navigation";
 import { BuyForm } from "@/components/orders/buy-form";
 import { categoryLabel, unitLabel } from "@/components/orders/order-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
+import { ProductReviews, ReviewsUnavailable } from "@/components/reviews/product-reviews";
 import { Icon } from "@/components/ui/icons";
+import { first } from "@/components/wallet/wallet-parts";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
 import { findMarketProduct } from "@/lib/server/products";
+import { findProductReviews } from "@/lib/server/reviews";
 import { formatKobo } from "@/lib/wallet/money";
 
 export const metadata: Metadata = { title: "Product" };
 
-export default async function MarketProductPage({ params }: { params: Promise<{ id: string }> }) {
+/** ?reviews= (1-based) pages through the product's reviews. */
+function reviewPage(value: string | undefined): number {
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n > 1 && n < 10_000 ? n : 1;
+}
+
+/** The product's reviews, or null if they couldn't be read (the product page still loads). */
+async function loadReviews(viewerId: Parameters<typeof findProductReviews>[0], id: string, page: number) {
+  try {
+    return await findProductReviews(viewerId, id, page);
+  } catch (error) {
+    console.error(`[product-reviews] failed: ${error instanceof Error ? error.name : typeof error}`);
+    return null;
+  }
+}
+
+export default async function MarketProductPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user } = await requireVerifiedPageSession();
   const product = await findMarketProduct(user._id, (await params).id);
   if (!product) notFound();
+  const reviews = await loadReviews(user._id, product.id, reviewPage(first((await searchParams).reviews)));
 
   return (
     <main className="flex flex-1 flex-col">
@@ -36,6 +62,7 @@ export default async function MarketProductPage({ params }: { params: Promise<{ 
           )}
         </section>
         <BuyForm product={product} />
+        {reviews ? <ProductReviews productId={product.id} {...reviews} /> : <ReviewsUnavailable productId={product.id} />}
       </div>
     </main>
   );

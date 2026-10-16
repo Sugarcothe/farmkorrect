@@ -14,6 +14,7 @@ import {
   type ProviderEventDoc,
   type PasswordResetDoc,
   type RefundDoc,
+  type ReviewDoc,
   type ServiceDoc,
   type SessionDoc,
   type UserDoc,
@@ -41,6 +42,7 @@ export async function collections() {
     orders: db.collection<OrderDoc>(COLLECTIONS.orders),
     orderPayments: db.collection<PaymentDoc>(COLLECTIONS.payments),
     refunds: db.collection<RefundDoc>(COLLECTIONS.refunds),
+    reviews: db.collection<ReviewDoc>(COLLECTIONS.reviews),
   };
 }
 

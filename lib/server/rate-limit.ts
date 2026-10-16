@@ -33,6 +33,8 @@ export const LIMITS = {
   orderActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
   orderReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   paymentChecksPerUser: { limit: 60, windowMs: 15 * 60_000 },
+  reviewWritesPerUser: { limit: 30, windowMs: 60 * 60_000 },
+  reviewReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },
 } satisfies Record<string, Limit>;
 

@@ -129,6 +129,14 @@ const INDEXES: Record<string, IndexDescription[]> = {
     },
     { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
   ],
+  [COLLECTIONS.reviews]: [
+    // one review per customer per product, whatever its status
+    { key: { productId: 1, reviewerUserId: 1 }, name: "one_per_customer", unique: true },
+    // a product's published reviews, newest first, and its rating summary
+    { key: { productId: 1, status: 1, createdAt: -1 }, name: "product_status" },
+    // My Reviews
+    { key: { reviewerUserId: 1, createdAt: -1 }, name: "reviewer_recent" },
+  ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
   ],
