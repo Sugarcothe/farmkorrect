@@ -262,11 +262,39 @@ export function payoutEventSpecs(payout: PayoutDoc, index: number): Notification
   ];
 }
 
+/**
+ * The seller hears about a published review once (keyed on the review, so a
+ * restore after removal doesn't repeat it); the author hears about each
+ * moderation decision. A moderation reason is internal and never sent.
+ */
 export function reviewEventSpecs(review: ReviewDoc, productName: string): NotificationSpec[] {
-  if (review.status !== "published") return [];
   const id = review._id.toHexString();
   const productId = review.productId.toHexString();
+  const specs: NotificationSpec[] = [];
+  const moderation = review.moderation;
+  if (moderation) {
+    const shown = review.status === "published";
+    const removed = review.status === "rejected";
+    if (shown || removed)
+      specs.push({
+        recipientUserId: review.reviewerUserId,
+        type: shown ? "review_approved" : "review_removed",
+        title: shown ? "Your review is published" : "Your review was removed",
+        body: clip(
+          shown
+            ? `Your review of ${productName} is now shown on the product.`
+            : `Your review of ${productName} was removed by moderation and isn't shown on the product.`,
+          160,
+        ),
+        url: "/profile/reviews",
+        eventKey: `review:${id}:moderation:${moderation.at.getTime()}`,
+        subject: { kind: "review", id },
+        eventAt: moderation.at,
+      });
+  }
+  if (review.status !== "published") return specs;
   return [
+    ...specs,
     {
       recipientUserId: review.sellerUserId,
       type: "review_published",
@@ -582,13 +610,46 @@ export async function syncReviewNotification(reviewId: ObjectId, now = new Date(
   const reviews = db.collection<ReviewDoc>(COLLECTIONS.reviews);
   const review = await reviews.findOne({ _id: reviewId });
   if (!review || !review.notifySyncAt) return;
-  if (!tooOld(review.createdAt, now)) {
-    const product = await db
-      .collection<ProductDoc>(COLLECTIONS.products)
-      .findOne({ _id: review.productId }, { projection: { name: 1 } });
-    await createNotifications(reviewEventSpecs(review, product?.name ?? "your product"), now);
-  }
+  const product = await db
+    .collection<ProductDoc>(COLLECTIONS.products)
+    .findOne({ _id: review.productId }, { projection: { name: 1 } });
+  const specs = reviewEventSpecs(review, product?.name ?? "your product").filter((spec) => !tooOld(spec.eventAt, now));
+  await createNotifications(specs, now);
   await reviews.updateOne({ _id: reviewId, notifySyncAt: review.notifySyncAt }, { $set: { notifySyncAt: null } });
+}
+
+/** The professional hears the outcome of an admin's credential decision (not the internal reason). */
+export function credentialEventSpecs(user: UserDoc): NotificationSpec[] {
+  const status = user.profile?.credentialStatus;
+  const at = user.profile?.credentialReviewedAt;
+  if (!at || (status !== "verified" && status !== "rejected")) return [];
+  const id = user._id.toHexString();
+  const verified = status === "verified";
+  return [
+    {
+      recipientUserId: user._id,
+      type: verified ? "credential_verified" : "credential_rejected",
+      title: verified ? "Credentials approved" : "Credentials not approved",
+      body: verified
+        ? "Our team reviewed the registration details you submitted and approved them."
+        : "Our team couldn't approve the registration details you submitted. Check them in Edit Profile.",
+      url: "/profile",
+      eventKey: `credential:${id}:${at.getTime()}`,
+      subject: { kind: "account", id },
+      eventAt: at,
+    },
+  ];
+}
+
+export async function syncCredentialNotification(userId: ObjectId, now = new Date()): Promise<void> {
+  const { users } = await notificationCollections();
+  const user = await users.findOne({ _id: userId }, { projection: { profile: 1, notifySyncAt: 1 } });
+  if (!user || !user.notifySyncAt) return;
+  await createNotifications(
+    credentialEventSpecs(user).filter((spec) => !tooOld(spec.eventAt, now)),
+    now,
+  );
+  await users.updateOne({ _id: userId, notifySyncAt: user.notifySyncAt }, { $set: { notifySyncAt: null } });
 }
 
 export async function syncBankAccountNotification(accountId: ObjectId, now = new Date()): Promise<void> {
@@ -639,6 +700,7 @@ export async function sweepNotificationSync(limit: number, now = new Date()) {
   await run(await ids(COLLECTIONS.payouts), syncPayoutNotifications);
   await run(await ids(COLLECTIONS.reviews), syncReviewNotification);
   await run(await ids(COLLECTIONS.payoutAccounts), syncBankAccountNotification);
+  await run(await ids(COLLECTIONS.users), syncCredentialNotification);
   return { synced, failed };
 }
 

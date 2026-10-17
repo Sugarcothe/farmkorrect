@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/server/db";
 import {
+  type AdminAuditDoc,
   type BankVerificationDoc,
   COLLECTIONS,
   type FarmDoc,
@@ -51,6 +52,7 @@ export async function collections() {
     deliveries: db.collection<NotificationDeliveryDoc>(COLLECTIONS.notificationDeliveries),
     notificationPreferences: db.collection<NotificationPreferencesDoc>(COLLECTIONS.notificationPreferences),
     pushSubscriptions: db.collection<PushSubscriptionDoc>(COLLECTIONS.pushSubscriptions),
+    adminAudit: db.collection<AdminAuditDoc>(COLLECTIONS.adminAudit),
   };
 }
 

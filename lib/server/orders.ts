@@ -17,6 +17,7 @@ import {
 import { cleanText } from "@/lib/profile/validation";
 import { formatKobo, isKobo } from "@/lib/wallet/money";
 import { CURRENCY, SETTLEMENT_DELAY_MS } from "@/lib/wallet/types";
+import { recordAudit } from "./admin-audit";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { MAX_PAGE_SIZE } from "./ledger";
@@ -633,18 +634,54 @@ export async function reportIssue(order: OrderDoc, buyerUserId: ObjectId, note: 
   return reload(updated);
 }
 
-/** Closes a reported issue (support, through the internal endpoint). */
-export async function closeIssue(number: string): Promise<OrderDoc | null> {
+/** Who closed an issue from the admin area, and their internal note. */
+export type IssueResolution = { adminUserId: ObjectId; note: string };
+
+/**
+ * Closes a reported issue: from the admin area (with the admin and their
+ * internal note) or through the internal endpoint (no person). The close
+ * and its audit record commit in one transaction, so neither exists without
+ * the other, and only the first of two simultaneous closes succeeds. Then
+ * the ledger releases the seller's earning and both sides are notified;
+ * the jobs retry either if it fails here. Refunds and payments are never
+ * touched: a refund that was due must have been made before closing.
+ * Returns null when the order has no open issue.
+ */
+export async function closeIssue(number: string, resolution?: IssueResolution): Promise<OrderDoc | null> {
   const { orders } = await orderCollections();
-  const now = new Date();
-  const updated = await orders.findOneAndUpdate(
-    { number, issue: { $ne: null }, "issue.closedAt": null },
-    {
-      $set: { "issue.closedAt": now, ledgerSyncAt: now, notifySyncAt: now, updatedAt: now },
-      $push: { history: historyItem("issue_closed", "system", null, now) },
-    },
-    { returnDocument: "after" },
-  );
+  const updated = await inTransaction(async (session) => {
+    const now = new Date();
+    const closed = await orders.findOneAndUpdate(
+      { number, issue: { $ne: null }, "issue.closedAt": null },
+      {
+        $set: {
+          "issue.closedAt": now,
+          ...(resolution && {
+            "issue.resolution": { note: resolution.note, byUserId: resolution.adminUserId, at: now },
+          }),
+          ledgerSyncAt: now,
+          notifySyncAt: now,
+          updatedAt: now,
+        },
+        $push: { history: historyItem("issue_closed", "system", resolution?.adminUserId ?? null, now) },
+      },
+      { returnDocument: "after", session },
+    );
+    if (!closed) return null;
+    await recordAudit(
+      {
+        actorUserId: resolution?.adminUserId ?? null,
+        action: "order_issue.close",
+        target: { type: "order", id: closed.number },
+        reason: resolution?.note ?? null,
+        from: "open",
+        to: "closed",
+      },
+      session,
+      now,
+    );
+    return closed;
+  });
   if (updated) {
     await bestEffort("ledger sync", () => syncOrderLedger(updated._id));
     await notifyOrder(updated._id);

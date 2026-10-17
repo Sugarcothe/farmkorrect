@@ -27,7 +27,7 @@ export const NOTIFICATION_CATEGORIES = [
   {
     value: "reviews",
     label: "Reviews & marketplace",
-    description: "New reviews on your listings.",
+    description: "New reviews on your listings, moderation of your reviews and checks of your credentials.",
   },
 ] as const;
 
@@ -93,6 +93,11 @@ export const NOTIFICATION_TYPES = {
   payout_paid: { category: "payouts", icon: "check-circle", channels: ["email", "sms", "push"] },
   payout_failed: { category: "payouts", icon: "alert-circle", channels: ["email", "sms", "push"] },
   review_published: { category: "reviews", icon: "star", channels: ["email", "push"] },
+  // decisions by the Farm Korret team: shown in the app only
+  review_approved: { category: "reviews", icon: "check-circle", channels: [] },
+  review_removed: { category: "reviews", icon: "alert-circle", channels: [] },
+  credential_verified: { category: "reviews", icon: "check-circle", channels: [] },
+  credential_rejected: { category: "reviews", icon: "alert-circle", channels: [] },
   // the account
   bank_account_added: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
   bank_account_changed: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
