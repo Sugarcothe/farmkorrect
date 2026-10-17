@@ -102,6 +102,9 @@ const PROJECTION = {
   area: 1,
   ratingCount: 1,
   ratingAverage: 1,
+  fulfillment: 1,
+  // cards only show the main photo (null on listings without photos)
+  images: { $slice: ["$images", 1] },
 } as const;
 
 /** One page of the Market for a validated query (see parseMarketQuery). */

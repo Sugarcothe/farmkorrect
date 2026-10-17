@@ -14,6 +14,7 @@ import {
   type ProductUnit,
 } from "@/lib/orders/types";
 import { formatKobo } from "@/lib/wallet/money";
+import { OrderFulfillmentDetails } from "./fulfillment-parts";
 
 // Pieces shared by the Market, Orders and Sales screens. Every amount and
 // status shown comes from the server; nothing here decides one.
@@ -216,10 +217,23 @@ export function OrderHeader({ order }: { order: Order }) {
   );
 }
 
+/**
+ * Pickup or delivery as agreed when the order was placed, and the buyer's
+ * note. Choosing delivery says nothing about whether it was sent: that's the
+ * order's status above.
+ */
 export function DeliveryNote({ order }: { order: Order }) {
   return (
-    <Card title="Delivery details">
-      <p className="text-sm leading-relaxed whitespace-pre-line text-foreground/80">{order.deliveryNote}</p>
+    <Card title="Pickup & delivery">
+      <OrderFulfillmentDetails fulfillment={order.fulfillment} />
+      <h4 className="mt-3 text-xs font-medium text-foreground/70">
+        {order.viewer === "buyer" ? "Your note to the seller" : "The buyer's note"}
+      </h4>
+      <p className="mt-0.5 text-sm leading-relaxed whitespace-pre-line text-foreground/80">{order.deliveryNote}</p>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        Farm Korret doesn&rsquo;t calculate or collect delivery fees. Any delivery charge is agreed directly between buyer and
+        seller.
+      </p>
     </Card>
   );
 }

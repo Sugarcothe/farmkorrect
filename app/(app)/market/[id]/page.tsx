@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { productPlace } from "@/components/market/product-card";
+import { ProductGallery } from "@/components/market/product-gallery";
 import { BuyForm } from "@/components/orders/buy-form";
+import { FulfillmentOptions } from "@/components/orders/fulfillment-parts";
 import { categoryLabel, unitLabel } from "@/components/orders/order-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { ProductReviews, ReviewsUnavailable } from "@/components/reviews/product-reviews";
@@ -47,11 +49,9 @@ export default async function MarketProductPage({
     <main className="flex flex-1 flex-col">
       <ProfileTopBar title="Product" back={<BackLink href="/market" />} />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
+        <ProductGallery name={product.name} images={product.images} />
         <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-foreground/5">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-primary/8 text-primary">
-            <Icon name="egg" className="size-6" />
-          </span>
-          <h2 className="mt-3 text-xl font-semibold tracking-tight">{product.name}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{product.name}</h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {categoryLabel(product.category)} · sold by {product.own ? "you" : product.sellerName}
           </p>
@@ -69,6 +69,7 @@ export default async function MarketProductPage({
             <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">{product.description}</p>
           )}
         </section>
+        <FulfillmentOptions fulfillment={product.fulfillment} />
         <BuyForm product={product} />
         {reviews ? <ProductReviews productId={product.id} {...reviews} /> : <ReviewsUnavailable productId={product.id} />}
       </div>

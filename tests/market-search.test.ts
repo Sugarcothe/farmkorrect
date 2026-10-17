@@ -498,7 +498,7 @@ describe("ratings and buying from search results", () => {
     const customer = await merchant("veterinarian");
     const placed = await call<OrderResponse>(placeRoute, "/api/orders", {
       cookie: customer.cookie,
-      body: { items: [{ productId, quantity: 1 }], deliveryNote: NOTE, idempotencyKey: randomUUID() },
+      body: { items: [{ productId, quantity: 1 }], fulfillmentMethod: "pickup", deliveryNote: NOTE, idempotencyKey: randomUUID() },
     });
     expect(placed.status).toBe(201);
     const order = dataOf(placed).order;
@@ -559,13 +559,13 @@ describe("ratings and buying from search results", () => {
     const customer = await merchant("veterinarian");
     const stale = await call(placeRoute, "/api/orders", {
       cookie: customer.cookie,
-      body: { items: [{ productId: seen.id, quantity: 1 }], deliveryNote: NOTE, idempotencyKey: randomUUID(), expectedTotalKobo: seen.priceKobo },
+      body: { items: [{ productId: seen.id, quantity: 1 }], fulfillmentMethod: "pickup", deliveryNote: NOTE, idempotencyKey: randomUUID(), expectedTotalKobo: seen.priceKobo },
     });
     expect(stale.status).toBe(409);
 
     const own = await call(placeRoute, "/api/orders", {
       cookie: seller.cookie,
-      body: { items: [{ productId: product.id, quantity: 1 }], deliveryNote: NOTE, idempotencyKey: randomUUID() },
+      body: { items: [{ productId: product.id, quantity: 1 }], fulfillmentMethod: "pickup", deliveryNote: NOTE, idempotencyKey: randomUUID() },
     });
     expect(own.status).toBe(400);
   });

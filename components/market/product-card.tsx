@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icons";
 import { stateLabel } from "@/lib/locations/nigeria";
 import type { MarketProduct } from "@/lib/orders/types";
 import { formatKobo } from "@/lib/wallet/money";
+import { ProductPhoto } from "./product-photo";
 
 /** "Nsukka, Enugu", "Enugu", or null when the seller hasn't given a location. */
 export function productPlace(product: Pick<MarketProduct, "state" | "area">): string | null {
@@ -19,7 +20,8 @@ function availability(stock: number) {
 /**
  * A Market listing. Everything shown comes from the listing and its
  * published reviews: no rating is drawn for a product nobody has reviewed,
- * and no place for one whose seller hasn't given it.
+ * no place for one whose seller hasn't given it, and no picture for one
+ * without photos (a plain placeholder instead).
  */
 export function ProductCard({ product: p }: { product: MarketProduct }) {
   const place = productPlace(p);
@@ -29,13 +31,11 @@ export function ProductCard({ product: p }: { product: MarketProduct }) {
       href={`/market/${p.id}`}
       className="flex h-full flex-col rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-foreground/5 outline-none hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-accent"
     >
-      <span className="flex items-start justify-between gap-2">
-        <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/8 text-primary">
-          <Icon name="egg" className="size-5" />
-        </span>
+      <span className="relative -mx-3.5 -mt-3.5 block aspect-[4/3] overflow-hidden rounded-t-3xl bg-primary/8">
+        <ProductPhoto image={p.images[0]} alt={p.name} width={480} sizes="(min-width: 420px) 200px, 50vw" />
         {p.rating && (
           <span
-            className="flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-amber-800"
+            className="absolute top-2 right-2 flex items-center gap-0.5 rounded-full bg-amber-50 px-1.5 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-amber-800 shadow-sm"
             aria-label={`Rated ${p.rating.average.toFixed(1)} out of 5 from ${p.rating.count} ${p.rating.count === 1 ? "review" : "reviews"}`}
           >
             <Icon name="star" className="size-3 fill-current" />

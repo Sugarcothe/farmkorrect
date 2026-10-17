@@ -179,6 +179,12 @@ export function toOrder(order: OrderDoc, viewer: "buyer" | "seller", now = new D
     totalKobo: order.totalKobo,
     currency: order.currency,
     deliveryNote: order.deliveryNote,
+    fulfillment: order.fulfillment
+      ? {
+          method: order.fulfillment.method,
+          details: order.fulfillment.details.map((d) => ({ ...d, productId: d.productId.toHexString() })),
+        }
+      : null,
     paymentStatus: order.paymentStatus,
     fulfillmentStatus: order.fulfillmentStatus,
     refundedKobo: order.refundedKobo,

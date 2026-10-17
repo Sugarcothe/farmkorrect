@@ -1,6 +1,15 @@
 import { isNigerianState } from "@/lib/locations/nigeria";
 import { cleanText } from "@/lib/profile/validation";
-import { ORDER_LIMITS, PRODUCT_CATEGORIES, PRODUCT_LIMITS, PRODUCT_UNITS } from "./types";
+import {
+  FULFILLMENT_LIMITS,
+  FULFILLMENT_METHODS,
+  ORDER_LIMITS,
+  PRODUCT_CATEGORIES,
+  PRODUCT_LIMITS,
+  PRODUCT_UNITS,
+  type FulfillmentMethod,
+  type ProductFulfillment,
+} from "./types";
 
 // Pure validators for listings and orders; each returns an error message, or
 // undefined when valid. The forms run them as the user types and the API
@@ -50,6 +59,45 @@ export function validatePriceKobo(value: number) {
 export function validateStockQuantity(value: number) {
   if (!Number.isSafeInteger(value) || value < 0) return "Enter how many you have, as a whole number.";
   if (value > PRODUCT_LIMITS.stock.max) return `Keep the stock to ${PRODUCT_LIMITS.stock.max.toLocaleString("en-NG")} or fewer.`;
+}
+
+// --- fulfilment ---------------------------------------------------------------------
+
+export function validateFulfillmentMethods(pickupEnabled: boolean, deliveryEnabled: boolean) {
+  if (!pickupEnabled && !deliveryEnabled) return "Offer pickup, delivery or both.";
+}
+
+export function validatePickupInstructions(value: string) {
+  if (cleanText(value, true).length > FULFILLMENT_LIMITS.instructions.max)
+    return `Keep the pickup instructions to ${FULFILLMENT_LIMITS.instructions.max} characters or fewer.`;
+}
+
+/** Areas are only needed while delivery is offered. */
+export function validateDeliveryAreas(value: string, deliveryEnabled: boolean) {
+  const areas = cleanText(value);
+  const { min, max } = FULFILLMENT_LIMITS.areas;
+  if (areas.length > max) return `Keep the areas to ${max} characters or fewer.`;
+  if (!deliveryEnabled) return;
+  if (!areas) return "Say where you deliver to.";
+  if (areas.length < min) return `Use at least ${min} characters.`;
+}
+
+export function validateDeliveryTiming(value: string) {
+  if (cleanText(value).length > FULFILLMENT_LIMITS.timing.max)
+    return `Keep the timing to ${FULFILLMENT_LIMITS.timing.max} characters or fewer.`;
+}
+
+export function validateDeliveryInstructions(value: string) {
+  if (cleanText(value, true).length > FULFILLMENT_LIMITS.instructions.max)
+    return `Keep the delivery instructions to ${FULFILLMENT_LIMITS.instructions.max} characters or fewer.`;
+}
+
+export const isFulfillmentMethod = (value: unknown): value is FulfillmentMethod =>
+  FULFILLMENT_METHODS.some((m) => m.value === value);
+
+/** The methods every one of these products offers (an order uses one method for all of them). */
+export function sharedFulfillmentMethods(options: ProductFulfillment[]): FulfillmentMethod[] {
+  return FULFILLMENT_METHODS.map((m) => m.value).filter((method) => options.every((o) => o[method].enabled));
 }
 
 export function validateQuantity(value: number, available: number) {

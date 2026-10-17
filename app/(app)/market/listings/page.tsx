@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FormAlert } from "@/components/auth/auth-screen";
+import { ProductPhoto } from "@/components/market/product-photo";
 import { categoryLabel, unitLabel } from "@/components/orders/order-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { buttonClasses } from "@/components/ui/button";
@@ -48,6 +49,9 @@ export default async function ListingsPage({
                   href={`/market/listings/${p.id}/edit`}
                   className="flex items-center gap-3 px-4 py-3.5 outline-none hover:bg-foreground/[0.03] focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset"
                 >
+                  <span className="relative size-12 shrink-0 overflow-hidden rounded-xl bg-primary/8">
+                    <ProductPhoto image={p.images[0]} alt={p.name} width={160} sizes="48px" />
+                  </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{p.name}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
