@@ -148,6 +148,7 @@ type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "name"> & 
   name: string;
   label: string;
   error?: string;
+  hint?: string;
   placeholder: string;
   options: ReadonlyArray<{ value: string; label: string }>;
 };
@@ -155,6 +156,7 @@ type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "name"> & 
 export function SelectField({
   label,
   error,
+  hint,
   placeholder,
   options,
   id,
@@ -170,13 +172,14 @@ export function SelectField({
       id={selectId}
       label={label}
       error={error}
+      hint={hint}
       className={className}
     >
       <select
         id={selectId}
         value={value}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${selectId}-message` : undefined}
+        aria-describedby={error || hint ? `${selectId}-message` : undefined}
         className={`${controlClass} cursor-pointer appearance-none ${value ? "" : "text-foreground/35"}`}
         {...props}
       >

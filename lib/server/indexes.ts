@@ -95,6 +95,20 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { sellerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "seller_current" },
     // the Market: listed products, newest first
     { key: { active: 1, archivedAt: 1, createdAt: -1 }, name: "market" },
+    // Market filters and sorts (lib/server/market.ts)
+    { key: { active: 1, archivedAt: 1, category: 1, createdAt: -1 }, name: "market_category" },
+    { key: { active: 1, archivedAt: 1, state: 1, createdAt: -1 }, name: "market_state" },
+    { key: { active: 1, archivedAt: 1, priceKobo: 1, _id: -1 }, name: "market_price" },
+    { key: { active: 1, archivedAt: 1, ratingAverage: -1, ratingCount: -1, _id: -1 }, name: "market_rating" },
+    // Market keyword search; a collection can only have one text index
+    {
+      key: { name: "text", searchTerms: "text", description: "text" },
+      name: "market_text",
+      weights: { name: 10, searchTerms: 3, description: 2 },
+      default_language: "english",
+      // no product field picks its own language
+      language_override: "textLanguage",
+    },
   ],
   [COLLECTIONS.orders]: [
     { key: { number: 1 }, name: "number_unique", unique: true },

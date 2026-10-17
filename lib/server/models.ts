@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
+import type { NigerianState } from "@/lib/locations/nigeria";
 import type {
   FulfillmentStatus,
   OrderActor,
@@ -407,6 +408,27 @@ export type ProductDoc = {
   active: boolean;
   /** set when the seller removes it; kept for the orders that refer to it */
   archivedAt: Date | null;
+  /**
+   * Where the produce is (or is picked up from), as chosen by the seller.
+   * Listings from before locations existed have neither field and are
+   * treated as "location not given": they still appear everywhere except
+   * under an explicit state filter.
+   */
+  state?: NigerianState | null;
+  area?: string;
+  /**
+   * Derived search data, never set from a request:
+   * - searchTerms: the category's name and the everyday words for it
+   *   (catalog.ts), so "broilers" finds live birds;
+   * - ratingCount / ratingAverage: the product's published reviews, kept in
+   *   step whenever one of its reviews changes and rebuildable from the
+   *   reviews (`npm run db:rebuild-search`). ratingGen orders concurrent
+   *   refreshes so an older count can't overwrite a newer one.
+   */
+  searchTerms?: string;
+  ratingCount?: number;
+  ratingAverage?: number | null;
+  ratingGen?: number;
   createdAt: Date;
   updatedAt: Date;
 };

@@ -11,6 +11,7 @@ import {
   type ReviewSummary,
 } from "@/lib/reviews/types";
 import { cleanReviewText, validateRating, validateReviewText } from "@/lib/reviews/validation";
+import { refreshProductRating } from "./catalog";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type OrderDoc, type ProductDoc, type ReviewDoc, type UserDoc } from "./models";
@@ -35,6 +36,11 @@ import { parseObjectId, PRODUCT_NOT_FOUND } from "./products";
 // be edited, withdrawn or reposted. Withdrawing hides a review; its author may
 // then write a new one, which goes through the same checks as a first review.
 // Sellers have no way to hide or change reviews of their products.
+//
+// Each product keeps a summary of its published reviews for the Market's
+// rating filter and sort (catalog.ts). It's refreshed after every change
+// made here; after changing a review's status directly in the database, run
+// `npm run db:rebuild-search` to bring the summaries back in line.
 
 export const REVIEWS_UNVERIFIED = "Verify your phone number before using the Market.";
 export const REVIEW_NOT_FOUND = "We couldn't find that review.";
@@ -269,6 +275,20 @@ export async function listMyReviews(userId: ObjectId, page: number): Promise<{ r
 
 // --- writing ----------------------------------------------------------------------------
 
+/**
+ * Brings the product's rating summary (used to filter and sort the Market)
+ * in line with its published reviews. The review itself is already saved,
+ * so a failure here is logged rather than reported to the customer; the
+ * summary can be rebuilt with `npm run db:rebuild-search`.
+ */
+async function refreshRating(productId: ObjectId) {
+  try {
+    await refreshProductRating(await getDb(), productId);
+  } catch (error) {
+    console.error(`[reviews] rating summary refresh failed: ${error instanceof Error ? error.name : typeof error}`);
+  }
+}
+
 /** Writes the signed-in customer's review of a listed product they bought and received. */
 export async function createReview(reviewer: UserDoc, productId: string, input: ReviewInput): Promise<MyReview> {
   const product = await listedProduct(productId);
@@ -307,6 +327,7 @@ export async function createReview(reviewer: UserDoc, productId: string, input: 
   try {
     const doc: ReviewDoc = { _id: new ObjectId(), productId: product._id, reviewerUserId: reviewer._id, ...fields };
     await reviews.insertOne(doc);
+    await refreshRating(product._id);
     await notifySeller(doc._id);
     return toMyReview(doc, product);
   } catch (error) {
@@ -320,6 +341,7 @@ export async function createReview(reviewer: UserDoc, productId: string, input: 
     { returnDocument: "after" },
   );
   if (!replaced) throw new HttpError(409, ALREADY_REVIEWED);
+  await refreshRating(product._id);
   await notifySeller(replaced._id);
   return toMyReview(replaced, product);
 }
@@ -358,6 +380,7 @@ export async function updateReview(reviewerUserId: ObjectId, id: string, input: 
     { returnDocument: "after" },
   );
   if (!saved) throw new HttpError(409, CHANGED);
+  if (input.rating !== undefined) await refreshRating(saved.productId);
   return toMyReview(saved, await productOf(saved));
 }
 
@@ -373,5 +396,6 @@ export async function withdrawReview(reviewerUserId: ObjectId, id: string): Prom
     { returnDocument: "after" },
   );
   if (!saved) throw new HttpError(409, CHANGED);
+  await refreshRating(saved.productId);
   return toMyReview(saved, await productOf(saved));
 }

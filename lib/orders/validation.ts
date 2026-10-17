@@ -1,3 +1,4 @@
+import { isNigerianState } from "@/lib/locations/nigeria";
 import { cleanText } from "@/lib/profile/validation";
 import { ORDER_LIMITS, PRODUCT_CATEGORIES, PRODUCT_LIMITS, PRODUCT_UNITS } from "./types";
 
@@ -16,6 +17,16 @@ export function validateProductName(value: string) {
 export function validateProductDescription(value: string) {
   if (cleanText(value, true).length > PRODUCT_LIMITS.description.max)
     return `Keep the description to ${PRODUCT_LIMITS.description.max} characters or fewer.`;
+}
+
+/** A listing's state is optional; when given it must be one of the listed states. */
+export function validateProductState(value: string | null) {
+  if (value !== null && value !== "" && !isNigerianState(value)) return "Choose one of the listed states.";
+}
+
+export function validateProductArea(value: string) {
+  if (cleanText(value).length > PRODUCT_LIMITS.area.max)
+    return `Keep the town or area to ${PRODUCT_LIMITS.area.max} characters or fewer.`;
 }
 
 export function validateProductCategory(value: string) {

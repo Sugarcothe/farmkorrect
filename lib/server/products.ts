@@ -4,13 +4,16 @@ import type { Role } from "@/lib/auth/types";
 import { PRODUCT_LIMITS, type MarketProduct, type Product, type ProductFields } from "@/lib/orders/types";
 import {
   validatePriceKobo,
+  validateProductArea,
   validateProductCategory,
   validateProductDescription,
   validateProductName,
+  validateProductState,
   validateProductUnit,
   validateStockQuantity,
 } from "@/lib/orders/validation";
 import { cleanText } from "@/lib/profile/validation";
+import { searchTermsFor } from "./catalog";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type ProductDoc, type UserDoc } from "./models";
@@ -47,6 +50,8 @@ export function toProduct(doc: ProductDoc): Product {
     priceKobo: doc.priceKobo,
     stockQuantity: doc.stockQuantity,
     active: doc.active,
+    state: doc.state ?? null,
+    area: doc.area ?? "",
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -62,6 +67,9 @@ const FIELD_TYPES = {
   priceKobo: "number",
   stockQuantity: "number",
   active: "boolean",
+  // a state value, or null to say the location isn't given
+  state: "string",
+  area: "string",
 } as const satisfies Record<keyof ProductFields, string>;
 
 const isField = (key: string): key is keyof ProductFields => Object.hasOwn(FIELD_TYPES, key);
@@ -74,13 +82,16 @@ function readFields(body: Record<string, unknown>): Partial<ProductFields> {
   const fieldErrors: Record<string, string> = {};
   for (const key of Object.keys(body)) {
     if (!isField(key)) fieldErrors[key] = "This can't be set on a product.";
-    else if (typeof body[key] !== FIELD_TYPES[key]) fieldErrors[key] = "This value isn't valid.";
+    else if (typeof body[key] !== FIELD_TYPES[key] && !(key === "state" && body[key] === null))
+      fieldErrors[key] = "This value isn't valid.";
   }
   if (Object.keys(fieldErrors).length)
     throw new HttpError(400, "Some of these details can't be set on a product.", fieldErrors);
   const fields = { ...body } as Partial<ProductFields>;
   if (fields.name !== undefined) fields.name = cleanText(fields.name);
   if (fields.description !== undefined) fields.description = cleanText(fields.description, true);
+  if (fields.area !== undefined) fields.area = cleanText(fields.area);
+  if ((fields.state as string | undefined) === "") fields.state = null;
   return fields;
 }
 
@@ -98,6 +109,8 @@ function check(fields: Partial<ProductFields>) {
     unit: fields.unit === undefined ? undefined : validateProductUnit(fields.unit),
     priceKobo: fields.priceKobo === undefined ? undefined : validatePriceKobo(fields.priceKobo),
     stockQuantity: fields.stockQuantity === undefined ? undefined : validateStockQuantity(fields.stockQuantity),
+    state: fields.state === undefined ? undefined : validateProductState(fields.state),
+    area: fields.area === undefined ? undefined : validateProductArea(fields.area),
   });
 }
 
@@ -119,6 +132,8 @@ export function parseNewProduct(body: Record<string, unknown>): ProductFields {
     priceKobo: fields.priceKobo!,
     stockQuantity: fields.stockQuantity!,
     active: fields.active ?? true,
+    state: fields.state ?? null,
+    area: fields.area ?? "",
   };
 }
 
@@ -172,7 +187,17 @@ export async function createProduct(sellerUserId: ObjectId, fields: ProductField
       `You can list up to ${PRODUCT_LIMITS.perSeller} products. Remove one you no longer sell to add another.`,
     );
   const now = new Date();
-  const doc: ProductDoc = { _id: new ObjectId(), sellerUserId, ...fields, archivedAt: null, createdAt: now, updatedAt: now };
+  const doc: ProductDoc = {
+    _id: new ObjectId(),
+    sellerUserId,
+    ...fields,
+    archivedAt: null,
+    searchTerms: searchTermsFor(fields.category),
+    ratingCount: 0,
+    ratingAverage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
   await collection.insertOne(doc);
   return doc;
 }
@@ -193,9 +218,10 @@ export async function updateOwnProduct(
   if (!_id) return null;
   const collection = await products();
   const filter = update.expectedStock === null ? ownedBy(sellerUserId, _id) : { ...ownedBy(sellerUserId, _id), stockQuantity: update.expectedStock };
+  const derived = update.fields.category ? { searchTerms: searchTermsFor(update.fields.category) } : {};
   const saved = await collection.findOneAndUpdate(
     filter,
-    { $set: { ...update.fields, updatedAt: new Date() } },
+    { $set: { ...update.fields, ...derived, updatedAt: new Date() } },
     { returnDocument: "after" },
   );
   if (!saved && update.expectedStock !== null && (await collection.findOne(ownedBy(sellerUserId, _id))))
@@ -214,10 +240,9 @@ export async function archiveOwnProduct(sellerUserId: ObjectId, id: string): Pro
 }
 
 // --- the Market ---------------------------------------------------------------------
+// Searching and filtering the Market lives in market.ts; these shape what it finds.
 
-export const MARKET_PAGE_SIZE = 24;
-
-async function sellerNames(ids: ObjectId[]): Promise<Map<string, string>> {
+export async function sellerNames(ids: ObjectId[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const users = await (await getDb())
     .collection<UserDoc>(COLLECTIONS.users)
@@ -227,7 +252,8 @@ async function sellerNames(ids: ObjectId[]): Promise<Map<string, string>> {
   return new Map(users.map((u) => [u._id.toHexString(), u.fullName]));
 }
 
-function toMarketProduct(doc: ProductDoc, names: Map<string, string>, viewerId: ObjectId): MarketProduct {
+export function toMarketProduct(doc: ProductDoc, names: Map<string, string>, viewerId: ObjectId): MarketProduct {
+  const count = doc.ratingCount ?? 0;
   return {
     id: doc._id.toHexString(),
     name: doc.name,
@@ -238,20 +264,10 @@ function toMarketProduct(doc: ProductDoc, names: Map<string, string>, viewerId: 
     stockQuantity: doc.stockQuantity,
     sellerName: names.get(doc.sellerUserId.toHexString()) ?? "Farm Korret seller",
     own: doc.sellerUserId.equals(viewerId),
+    state: doc.state ?? null,
+    area: doc.area ?? "",
+    rating: count > 0 && typeof doc.ratingAverage === "number" ? { average: doc.ratingAverage, count } : null,
   };
-}
-
-/** Listed products that are in stock, newest first. */
-export async function listMarket(viewerId: ObjectId, page: number): Promise<{ products: MarketProduct[]; hasMore: boolean }> {
-  const docs = await (await products())
-    .find({ active: true, archivedAt: null, stockQuantity: { $gt: 0 } })
-    .sort({ createdAt: -1, _id: -1 })
-    .skip((Math.max(1, page) - 1) * MARKET_PAGE_SIZE)
-    .limit(MARKET_PAGE_SIZE + 1)
-    .toArray();
-  const shown = docs.slice(0, MARKET_PAGE_SIZE);
-  const names = await sellerNames([...new Set(shown.map((d) => d.sellerUserId.toHexString()))].map((id) => new ObjectId(id)));
-  return { products: shown.map((d) => toMarketProduct(d, names, viewerId)), hasMore: docs.length > MARKET_PAGE_SIZE };
 }
 
 /** One listed product (even when sold out), or null. */
