@@ -1,6 +1,7 @@
 import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
+import type { AdminAction, AuditTargetType } from "@/lib/admin/types";
 import type { NigerianState } from "@/lib/locations/nigeria";
 import type {
   FulfillmentMethod,
@@ -55,6 +56,7 @@ export const COLLECTIONS = {
   notificationDeliveries: "notification_deliveries",
   notificationPreferences: "notification_preferences",
   pushSubscriptions: "push_subscriptions",
+  adminAudit: "admin_audit",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -76,6 +78,11 @@ export type UserDoc = {
   pendingExpiresAt?: Date;
   /** set the first time the user edits their profile; absent until then */
   profile?: UserProfileDoc;
+  /**
+   * Set with a credential decision that notifies the user; cleared once the
+   * notification exists (the notification job retries it). Absent otherwise.
+   */
+  notifySyncAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -94,11 +101,13 @@ export type UserProfileDoc = {
   qualifications?: string;
   registrationNumber?: string;
   /**
-   * Only ever "pending" from the app; "verified" or "rejected" is set by a
-   * reviewer outside the profile API.
+   * Only ever "pending" from the profile API; "verified" or "rejected" is set
+   * by an admin in the admin area (the audit trail records who and why).
    */
   credentialStatus?: CredentialStatus;
   credentialSubmittedAt?: Date;
+  /** when an admin last decided on the credential (the audit trail is authoritative) */
+  credentialReviewedAt?: Date;
   photo?: ProfilePhotoRef;
 };
 
@@ -515,7 +524,17 @@ export type OrderDoc = {
   cancelledAt: Date | null;
   cancelledBy: OrderActor | null;
   cancelReason: string | null;
-  issue: { reportedAt: Date; note: string; closedAt: Date | null } | null;
+  issue: {
+    reportedAt: Date;
+    note: string;
+    closedAt: Date | null;
+    /**
+     * Support's internal note, written once with the close and never shown
+     * to the buyer or seller. Absent when closed by the internal job endpoint
+     * or before the admin area existed.
+     */
+    resolution?: { note: string; byUserId: ObjectId; at: Date };
+  } | null;
   /**
    * The commission applied when the seller's earning was recorded. null
    * until then (including while no commission policy is configured).
@@ -635,6 +654,8 @@ export type ReviewDoc = {
   verifiedPurchase: boolean;
   editedAt: Date | null;
   withdrawnAt: Date | null;
+  /** the last moderation decision; its reason lives only in the audit trail */
+  moderation?: { action: "publish" | "reject" | "remove" | "restore"; at: Date };
   /**
    * Set in the same write as any change that notifies someone; cleared once
    * those notifications exist. The notification job retries any that stay
@@ -727,4 +748,24 @@ export type PushSubscriptionDoc = {
   lastSuccessAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+// --- admin & support -------------------------------------------------------------
+
+/**
+ * One admin action, written in the same transaction as the change it
+ * records, so neither exists without the other. Append-only: nothing in the
+ * app updates or deletes these. Holds ids, statuses and the admin's own
+ * reason or note only; never secrets, bank details or copies of documents.
+ */
+export type AdminAuditDoc = {
+  _id: ObjectId;
+  /** the admin; null for the internal job endpoint (ORDER_JOB_SECRET) */
+  actorUserId: ObjectId | null;
+  action: AdminAction;
+  target: { type: AuditTargetType; id: string };
+  reason: string | null;
+  from: string | null;
+  to: string | null;
+  at: Date;
 };

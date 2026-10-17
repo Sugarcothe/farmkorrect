@@ -271,3 +271,25 @@ export function getWebPushConfig(): WebPushConfig | null {
     throw new ConfigError("WEB_PUSH_SUBJECT must be a mailto: address or an https:// URL.");
   return { publicKey, privateKey, subject };
 }
+
+/**
+ * Parses ADMIN_USER_IDS: a comma-separated list of 24-character hex user ids.
+ * Fails closed: an empty value grants nothing, and so does any malformed
+ * entry (one typo disables admin access entirely rather than guessing which
+ * ids were meant). Never echoes the value.
+ */
+export function parseAdminUserIds(raw: string | undefined): { ids: ReadonlySet<string>; error: string | null } {
+  const value = raw?.trim();
+  if (!value) return { ids: new Set(), error: null };
+  const entries = value.split(",").map((entry) => entry.trim().toLowerCase());
+  if (entries.some((entry) => !/^[0-9a-f]{24}$/.test(entry)))
+    return { ids: new Set(), error: "ADMIN_USER_IDS must be a comma-separated list of user ids; admin access is disabled." };
+  return { ids: new Set(entries), error: null };
+}
+
+/** The user ids allowed into the admin area (empty: nobody). */
+export function getAdminUserIds(): ReadonlySet<string> {
+  const { ids, error } = parseAdminUserIds(process.env.ADMIN_USER_IDS);
+  if (error) console.error(`[config] ${error}`);
+  return ids;
+}

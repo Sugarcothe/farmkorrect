@@ -40,6 +40,8 @@ const TEST_ENV: Record<string, string> = {
   // on against the fake Paystack; tests switch it off where needed
   PAYSTACK_TRANSFERS_ENABLED: "true",
   PAYOUT_JOB_SECRET: "test-payout-job-secret-at-least-32-chars",
+  // nobody is an admin unless a test says so
+  ADMIN_USER_IDS: "",
   ORDER_JOB_SECRET: "test-order-job-secret-at-least-32-chars!",
   NOTIFICATION_JOB_SECRET: "test-notification-job-secret-32-chars!!",
   // Web Push is off unless a test sets keys (web-push itself is mocked there)

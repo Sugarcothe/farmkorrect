@@ -39,6 +39,8 @@ export const LIMITS = {
   notificationReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   notificationWritesPerUser: { limit: 300, windowMs: 15 * 60_000 },
   pushSubscriptionChangesPerUser: { limit: 20, windowMs: 60 * 60_000 },
+  adminReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
+  adminActionsPerUser: { limit: 300, windowMs: 60 * 60_000 },
   webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },
 } satisfies Record<string, Limit>;
 

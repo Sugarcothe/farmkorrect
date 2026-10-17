@@ -11,6 +11,14 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { phoneNormalized: 1 }, name: "phone_unique", unique: true },
     // never-verified sign-ups are cleaned up automatically
     { key: { pendingExpiresAt: 1 }, name: "pending_ttl", expireAfterSeconds: 0 },
+    // the admin credential queue
+    {
+      key: { "profile.credentialStatus": 1, "profile.credentialSubmittedAt": 1 },
+      name: "credential_queue",
+      partialFilterExpression: { "profile.credentialStatus": "pending" },
+    },
+    // credential decisions whose notifications still have to be created
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
   ],
   [COLLECTIONS.sessions]: [
     { key: { tokenHash: 1 }, name: "token_unique", unique: true },
@@ -90,6 +98,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
     // changes whose notifications still have to be created (the notification job's queue)
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+    // payouts flagged for a person to look at (admin exceptions)
+    { key: { updatedAt: -1 }, name: "flagged", partialFilterExpression: { issue: { $type: "string" } } },
   ],
   [COLLECTIONS.products]: [
     { key: { sellerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "seller_current" },
@@ -123,6 +133,13 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { fulfillmentStatus: 1, "inventory.releasedAt": 1 }, name: "release_queue" },
     // changes whose notifications still have to be created (the notification job's queue)
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+    // admin queues: open reported issues, and orders flagged for review
+    {
+      key: { "issue.closedAt": 1, "issue.reportedAt": 1 },
+      name: "issues",
+      partialFilterExpression: { "issue.reportedAt": { $type: "date" } },
+    },
+    { key: { updatedAt: -1 }, name: "flagged", partialFilterExpression: { reviewIssue: { $type: "string" } } },
   ],
   [COLLECTIONS.payments]: [
     { key: { reference: 1 }, name: "reference_unique", unique: true },
@@ -156,6 +173,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { productId: 1, status: 1, createdAt: -1 }, name: "product_status" },
     // My Reviews
     { key: { reviewerUserId: 1, createdAt: -1 }, name: "reviewer_recent" },
+    // the admin moderation queue
+    { key: { status: 1, createdAt: -1 }, name: "moderation_queue" },
     // changes whose notifications still have to be created (the notification job's queue)
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
   ],
@@ -175,6 +194,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // the dispatch queue and abandoned claims
     { key: { state: 1, nextAttemptAt: 1 }, name: "dispatch_queue" },
     { key: { state: 1, claimedAt: 1 }, name: "claims" },
+    // failed and exhausted deliveries (admin exceptions)
+    { key: { state: 1, updatedAt: -1 }, name: "state_recent" },
   ],
   [COLLECTIONS.pushSubscriptions]: [
     { key: { endpointHash: 1 }, name: "endpoint_unique", unique: true },
@@ -182,6 +203,13 @@ const INDEXES: Record<string, IndexDescription[]> = {
   ],
   [COLLECTIONS.rateLimits]: [
     { key: { expiresAt: 1 }, name: "expiry_ttl", expireAfterSeconds: 0 },
+  ],
+  // append-only and never expired: kept until a retention period is decided
+  [COLLECTIONS.adminAudit]: [
+    { key: { at: -1, _id: -1 }, name: "recent" },
+    { key: { action: 1, at: -1, _id: -1 }, name: "action_recent" },
+    { key: { "target.type": 1, "target.id": 1, at: -1, _id: -1 }, name: "target_recent" },
+    { key: { actorUserId: 1, at: -1, _id: -1 }, name: "actor_recent" },
   ],
 };
 

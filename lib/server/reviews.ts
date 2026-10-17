@@ -29,8 +29,9 @@ import { parseObjectId, PRODUCT_NOT_FOUND } from "./products";
 // - one review per customer per product, enforced by a unique index.
 //
 // Moderation policy: a new review that passes validation is published
-// straight away (NEW_REVIEW_STATUS). "pending" and "rejected" exist for a
-// person to set directly in the database (there is no admin screen); pending
+// straight away (NEW_REVIEW_STATUS). Admins can publish, reject, remove or
+// restore reviews in the admin area (lib/server/admin-reviews.ts), which
+// never changes a review's rating or text and never deletes one; pending
 // and rejected reviews are never shown publicly or counted. An edit keeps the
 // review's status, so a pending review stays pending and a rejected one can't
 // be edited, withdrawn or reposted. Withdrawing hides a review; its author may
@@ -281,7 +282,8 @@ export async function listMyReviews(userId: ObjectId, page: number): Promise<{ r
  * so a failure here is logged rather than reported to the customer; the
  * summary can be rebuilt with `npm run db:rebuild-search`.
  */
-async function refreshRating(productId: ObjectId) {
+/** Recomputes a product's rating summary; a failure is logged (`npm run db:rebuild-search` repairs it). */
+export async function refreshRating(productId: ObjectId) {
   try {
     await refreshProductRating(await getDb(), productId);
   } catch (error) {
