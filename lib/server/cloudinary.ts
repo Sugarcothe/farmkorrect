@@ -50,10 +50,23 @@ async function post(config: CloudinaryConfig, action: "upload" | "destroy", para
   return { status: res.status, ok: res.ok, body };
 }
 
-/** Uploads an already validated and re-encoded WebP under a new, unguessable id. */
-export async function uploadImage(data: Buffer): Promise<StoredImage> {
+/**
+ * Where listing photos go: beside the profile photos' folder when that is the
+ * usual ".../avatars" (farm-korret/avatars -> farm-korret/products),
+ * otherwise in a "products" folder inside the configured one.
+ */
+export function productFolder(folder: string): string {
+  return folder.endsWith("/avatars") ? `${folder.slice(0, -"/avatars".length)}/products` : `${folder}/products`;
+}
+
+/**
+ * Uploads an already validated and re-encoded WebP under a new, unguessable
+ * id: a profile photo by default, or a listing photo.
+ */
+export async function uploadImage(data: Buffer, kind: "avatar" | "product" = "avatar"): Promise<StoredImage> {
   const config = requireConfig();
-  const publicId = `${config.folder}/${randomBytes(16).toString("hex")}`;
+  const folder = kind === "product" ? productFolder(config.folder) : config.folder;
+  const publicId = `${folder}/${randomBytes(16).toString("hex")}`;
   try {
     const { ok, status, body } = await post(
       config,

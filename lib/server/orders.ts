@@ -1,15 +1,26 @@
 import "server-only";
 import { createHash, randomInt } from "node:crypto";
 import { MongoServerError, ObjectId } from "mongodb";
-import { ORDER_LIMITS, type FulfillmentAction, type OrderActor, type OrderRequest } from "@/lib/orders/types";
-import { validateDeliveryNote, validateIssueNote, validateRefundReason } from "@/lib/orders/validation";
+import {
+  ORDER_LIMITS,
+  type FulfillmentAction,
+  type FulfillmentMethod,
+  type OrderActor,
+  type OrderRequest,
+} from "@/lib/orders/types";
+import {
+  isFulfillmentMethod,
+  validateDeliveryNote,
+  validateIssueNote,
+  validateRefundReason,
+} from "@/lib/orders/validation";
 import { cleanText } from "@/lib/profile/validation";
 import { formatKobo, isKobo } from "@/lib/wallet/money";
 import { CURRENCY, SETTLEMENT_DELAY_MS } from "@/lib/wallet/types";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { MAX_PAGE_SIZE } from "./ledger";
-import { COLLECTIONS, type OrderDoc, type OrderItemDoc, type UserDoc } from "./models";
+import { COLLECTIONS, type OrderDoc, type OrderItemDoc, type ProductDoc, type UserDoc } from "./models";
 import { syncOrderLedger } from "./order-ledger";
 import { closeAttempts, settleActiveAttempt } from "./order-payments";
 import { claimOrderRefund, continueRefund } from "./order-refunds";
@@ -25,7 +36,7 @@ import {
   releaseStock,
   reservationEnd,
 } from "./order-store";
-import { parseObjectId, SELLER_ROLE } from "./products";
+import { fulfillmentOf, parseObjectId, SELLER_ROLE } from "./products";
 
 // Placing orders and the buyer's and seller's actions on them. The buyer and
 // seller always come from the session; prices, the seller, stock and totals
@@ -53,7 +64,7 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
   const fieldErrors: Record<string, string> = {};
   // prices, totals, sellers and statuses are never accepted
   for (const key of Object.keys(body))
-    if (!["items", "deliveryNote", "idempotencyKey", "expectedTotalKobo"].includes(key))
+    if (!["items", "fulfillmentMethod", "deliveryNote", "idempotencyKey", "expectedTotalKobo"].includes(key))
       fieldErrors[key] = "This field can't be set.";
 
   const items: ParsedItem[] = [];
@@ -82,6 +93,8 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
     }
   }
 
+  const { fulfillmentMethod } = body;
+  if (!isFulfillmentMethod(fulfillmentMethod)) fieldErrors.fulfillmentMethod = "Choose pickup or delivery.";
   const deliveryNote = typeof body.deliveryNote === "string" ? cleanText(body.deliveryNote, true) : "";
   const noteError = validateDeliveryNote(deliveryNote);
   if (noteError) fieldErrors.deliveryNote = noteError;
@@ -94,6 +107,7 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
     throw new HttpError(400, "Some details aren't valid. Check the highlighted fields.", fieldErrors);
   return {
     items,
+    fulfillmentMethod: fulfillmentMethod as FulfillmentMethod,
     deliveryNote,
     idempotencyKey: (idempotencyKey as string).toLowerCase(),
     ...(expectedTotalKobo !== undefined ? { expectedTotalKobo: expectedTotalKobo as number } : {}),
@@ -102,7 +116,46 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
 
 function requestHash(input: ParsedOrderRequest): string {
   const items = input.items.map((i) => `${i.productId.toHexString()}x${i.quantity}`).join(",");
-  return createHash("sha256").update(`${items}\u0000${input.deliveryNote}`).digest("hex");
+  return createHash("sha256")
+    .update(`${items}\u0000${input.deliveryNote}\u0000${input.fulfillmentMethod}`)
+    .digest("hex");
+}
+
+export const FULFILLMENT_CHANGED =
+  "The seller changed their pickup or delivery options while you were ordering. Reload the page and choose again.";
+
+type FulfillmentDetail = NonNullable<OrderDoc["fulfillment"]>["details"][number];
+
+/** What the buyer is relying on for this product and method, as it is now. */
+function fulfillmentDetail(product: ProductDoc, method: FulfillmentMethod): FulfillmentDetail {
+  const options = fulfillmentOf(product);
+  return method === "pickup"
+    ? { productId: product._id, name: product.name, areas: "", timing: "", instructions: options.pickup.instructions }
+    : {
+        productId: product._id,
+        name: product.name,
+        areas: options.delivery.areas,
+        timing: options.delivery.timing,
+        instructions: options.delivery.instructions,
+      };
+}
+
+/**
+ * Matches the product only while the method and its details are still
+ * exactly what the order records, so an edit between reading the listing and
+ * reserving its stock is caught. Listings without options are pickup only.
+ */
+function sameFulfillmentFilter(product: ProductDoc, method: FulfillmentMethod): Record<string, unknown> {
+  const f = product.fulfillment;
+  if (!f) return { fulfillment: { $exists: false } };
+  return method === "pickup"
+    ? { "fulfillment.pickup.enabled": true, "fulfillment.pickup.instructions": f.pickup.instructions }
+    : {
+        "fulfillment.delivery.enabled": true,
+        "fulfillment.delivery.areas": f.delivery.areas,
+        "fulfillment.delivery.timing": f.delivery.timing,
+        "fulfillment.delivery.instructions": f.delivery.instructions,
+      };
 }
 
 function sameRequest(existing: OrderDoc, hash: string): OrderDoc {
@@ -136,6 +189,8 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
     .toArray();
   const byId = new Map(docs.map((d) => [d._id.toHexString(), d]));
   const items: OrderItemDoc[] = [];
+  const details: FulfillmentDetail[] = [];
+  const reserveFilters: Array<Record<string, unknown>> = [];
   for (const { productId, quantity } of input.items) {
     const product = byId.get(productId.toHexString());
     if (!product) throw new HttpError(409, "A product in your order is no longer available. Reload and try again.");
@@ -148,6 +203,15 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
         product.stockQuantity > 0 ? `Only ${product.stockQuantity} left of ${product.name}.` : `${product.name} is sold out.`,
         { quantity: product.stockQuantity > 0 ? `Only ${product.stockQuantity} left.` : "Sold out." },
       );
+    // checked against the listing as it is now, never what the page showed
+    if (!fulfillmentOf(product)[input.fulfillmentMethod].enabled) {
+      const message = `${product.name} isn't available for ${input.fulfillmentMethod} any more. ${
+        input.items.length > 1 ? "Choose an option every product offers." : "Choose another option."
+      }`;
+      throw new HttpError(409, message, { fulfillmentMethod: message });
+    }
+    details.push(fulfillmentDetail(product, input.fulfillmentMethod));
+    reserveFilters.push(sameFulfillmentFilter(product, input.fulfillmentMethod));
     items.push({
       productId,
       name: product.name,
@@ -174,21 +238,25 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
   const place = async (): Promise<OrderDoc> =>
     inTransaction(async (session) => {
       const now = new Date();
-      for (const item of items) {
+      for (const [index, item] of items.entries()) {
+        const live = {
+          _id: item.productId,
+          sellerUserId,
+          active: true,
+          archivedAt: null,
+          priceKobo: item.unitPriceKobo,
+          stockQuantity: { $gte: item.quantity },
+        };
         const taken = await products.updateOne(
-          {
-            _id: item.productId,
-            sellerUserId,
-            active: true,
-            archivedAt: null,
-            priceKobo: item.unitPriceKobo,
-            stockQuantity: { $gte: item.quantity },
-          },
+          { ...live, ...reserveFilters[index] },
           { $inc: { stockQuantity: -item.quantity } },
           { session },
         );
-        if (taken.modifiedCount !== 1)
-          throw new HttpError(409, `${item.name} changed or sold out while you were ordering. Reload and try again.`);
+        if (taken.modifiedCount === 1) continue;
+        // only the pickup or delivery details changed: say so
+        if (await products.countDocuments(live, { session, limit: 1 }))
+          throw new HttpError(409, FULFILLMENT_CHANGED, { fulfillmentMethod: FULFILLMENT_CHANGED });
+        throw new HttpError(409, `${item.name} changed or sold out while you were ordering. Reload and try again.`);
       }
       const order: OrderDoc = {
         _id: new ObjectId(),
@@ -205,6 +273,8 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
         totalKobo: subtotalKobo,
         currency: CURRENCY,
         deliveryNote: input.deliveryNote,
+        // a record of what was agreed; it adds nothing to the total
+        fulfillment: { method: input.fulfillmentMethod, details },
         paymentStatus: "pending",
         fulfillmentStatus: "pending",
         paymentReference: null,

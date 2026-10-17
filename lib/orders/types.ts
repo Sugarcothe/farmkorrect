@@ -1,7 +1,9 @@
 // Shapes the Market, Orders and Sales API sends and accepts. Amounts are
 // integer kobo in NGN. Prices, totals, sellers, stock and every status are
 // decided on the server: the browser only ever sends product ids,
-// quantities, a delivery note and an idempotency key.
+// quantities, a fulfilment choice, a delivery note and an idempotency key.
+// Farm Korret never adds a delivery fee: any delivery charge is agreed
+// between buyer and seller, outside the app.
 
 import type { NigerianState } from "@/lib/locations/nigeria";
 import type { Currency } from "@/lib/wallet/types";
@@ -45,6 +47,45 @@ export const ORDER_LIMITS = {
   refundReason: { min: 5, max: 200 },
 } as const;
 
+/** Product photos: stored at Cloudinary as WebP; only references are kept here. */
+export const PRODUCT_PHOTO_RULES = {
+  maxBytes: 8 * 1024 * 1024,
+  maxPhotos: 5,
+  types: ["image/jpeg", "image/png", "image/webp"],
+} as const;
+
+/** How a buyer gets the goods. Both are arranged by the seller; there's no courier. */
+export const FULFILLMENT_METHODS = [
+  { value: "pickup", label: "Pickup" },
+  { value: "delivery", label: "Seller-arranged delivery" },
+] as const;
+
+export type FulfillmentMethod = (typeof FULFILLMENT_METHODS)[number]["value"];
+
+export const FULFILLMENT_LIMITS = {
+  instructions: { max: 300 },
+  /** where the seller delivers to (e.g. "Ikeja, Yaba and Surulere") */
+  areas: { min: 3, max: 200 },
+  /** e.g. "Within 2 days of payment" */
+  timing: { max: 120 },
+} as const;
+
+export type ProductFulfillment = {
+  pickup: { enabled: boolean; instructions: string };
+  delivery: { enabled: boolean; areas: string; timing: string; instructions: string };
+};
+
+/** Listings made before fulfilment options existed are pickup only. */
+export const DEFAULT_FULFILLMENT: ProductFulfillment = {
+  pickup: { enabled: true, instructions: "" },
+  delivery: { enabled: false, areas: "", timing: "", instructions: "" },
+};
+
+export const NO_DELIVERY_FEE_NOTICE =
+  "Farm Korret doesn't calculate or collect delivery fees. Any delivery charge is agreed directly between you and the seller.";
+
+export type ProductImage = { id: string; url: string; width: number; height: number };
+
 /** Unpaid orders hold their stock this long, then they're cancelled. */
 export const RESERVATION_MS = 30 * 60_000;
 
@@ -60,10 +101,18 @@ export type ProductFields = {
   state: NigerianState | null;
   /** optional town, area or LGA within the state ("" when not given) */
   area: string;
+  /** at least one method is always enabled */
+  fulfillment: ProductFulfillment;
 };
 
 /** One of the signed-in seller's own listings. */
-export type Product = ProductFields & { id: string; createdAt: string; updatedAt: string };
+export type Product = ProductFields & {
+  id: string;
+  /** the first is the main photo; empty when there are none */
+  images: ProductImage[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 /** A listing as buyers see it in the Market. */
 export type MarketProduct = {
@@ -82,6 +131,9 @@ export type MarketProduct = {
   area: string;
   /** from published reviews only; null when there are none */
   rating: { average: number; count: number } | null;
+  /** the first is the main photo (Market results carry only that one) */
+  images: ProductImage[];
+  fulfillment: ProductFulfillment;
 };
 
 /**
@@ -123,6 +175,17 @@ export type OrderActor = "buyer" | "seller" | "system";
 
 export type OrderEvent = { event: OrderEventName; at: string; by: OrderActor };
 
+/**
+ * How the buyer chose to get the goods, as the seller described it when the
+ * order was placed (one entry per product). Later edits to the listing don't
+ * change it. Choosing delivery isn't proof anything was sent: that's still
+ * the fulfilment status.
+ */
+export type OrderFulfillment = {
+  method: FulfillmentMethod;
+  details: Array<{ productId: string; name: string; areas: string; timing: string; instructions: string }>;
+};
+
 export type BuyerAction = "pay" | "cancel" | "report_issue";
 export type SellerAction = "accept" | "ship" | "deliver" | "cancel" | "refund";
 
@@ -139,6 +202,8 @@ export type Order = {
   totalKobo: number;
   currency: Currency;
   deliveryNote: string;
+  /** null for orders placed before fulfilment options existed */
+  fulfillment: OrderFulfillment | null;
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
   refundedKobo: number;
@@ -167,6 +232,8 @@ export type OrderSummary = Pick<
 
 export type OrderRequest = {
   items: Array<{ productId: string; quantity: number }>;
+  /** must be enabled on every product in the order */
+  fulfillmentMethod: FulfillmentMethod;
   deliveryNote: string;
   /** random UUID made once per checkout, so a resubmit returns the same order */
   idempotencyKey: string;

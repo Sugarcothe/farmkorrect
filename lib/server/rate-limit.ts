@@ -29,6 +29,7 @@ export const LIMITS = {
   payoutRequestsPerUser: { limit: 10, windowMs: 60 * 60_000 },
   walletReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   productChangesPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  productPhotoUploadsPerUser: { limit: 60, windowMs: 60 * 60_000 },
   orderCreatesPerUser: { limit: 30, windowMs: 60 * 60_000 },
   orderActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
   orderReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },

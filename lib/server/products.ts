@@ -1,8 +1,21 @@
 import "server-only";
 import { ObjectId } from "mongodb";
 import type { Role } from "@/lib/auth/types";
-import { PRODUCT_LIMITS, type MarketProduct, type Product, type ProductFields } from "@/lib/orders/types";
 import {
+  DEFAULT_FULFILLMENT,
+  PRODUCT_LIMITS,
+  type MarketProduct,
+  type Product,
+  type ProductFields,
+  type ProductFulfillment,
+  type ProductImage,
+} from "@/lib/orders/types";
+import {
+  validateDeliveryAreas,
+  validateDeliveryInstructions,
+  validateDeliveryTiming,
+  validateFulfillmentMethods,
+  validatePickupInstructions,
   validatePriceKobo,
   validateProductArea,
   validateProductCategory,
@@ -16,7 +29,7 @@ import { cleanText } from "@/lib/profile/validation";
 import { searchTermsFor } from "./catalog";
 import { getDb } from "./db";
 import { HttpError } from "./http";
-import { COLLECTIONS, type ProductDoc, type UserDoc } from "./models";
+import { COLLECTIONS, type ProductDoc, type ProductImageDoc, type UserDoc } from "./models";
 
 // Product listings. Only poultry farmers sell. A seller's own listings are
 // always looked up by id *and* the session's account, so someone else's id
@@ -40,6 +53,25 @@ export function parseObjectId(id: unknown): ObjectId | null {
   return typeof id === "string" && /^[0-9a-f]{24}$/i.test(id) ? new ObjectId(id) : null;
 }
 
+/** A listing's fulfilment options; older listings without any are pickup only. */
+export function fulfillmentOf(doc: Pick<ProductDoc, "fulfillment">): ProductFulfillment {
+  const f = doc.fulfillment;
+  if (!f) return structuredClone(DEFAULT_FULFILLMENT);
+  return {
+    pickup: { enabled: f.pickup.enabled, instructions: f.pickup.instructions ?? "" },
+    delivery: {
+      enabled: f.delivery.enabled,
+      areas: f.delivery.areas ?? "",
+      timing: f.delivery.timing ?? "",
+      instructions: f.delivery.instructions ?? "",
+    },
+  };
+}
+
+/** Photos as the browser sees them (never the storage id). */
+export const toProductImages = (images: ProductImageDoc[] | undefined): ProductImage[] =>
+  (images ?? []).map((i) => ({ id: i.id, url: i.url, width: i.width, height: i.height }));
+
 export function toProduct(doc: ProductDoc): Product {
   return {
     id: doc._id.toHexString(),
@@ -52,6 +84,8 @@ export function toProduct(doc: ProductDoc): Product {
     active: doc.active,
     state: doc.state ?? null,
     area: doc.area ?? "",
+    fulfillment: fulfillmentOf(doc),
+    images: toProductImages(doc.images),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -70,6 +104,8 @@ const FIELD_TYPES = {
   // a state value, or null to say the location isn't given
   state: "string",
   area: "string",
+  // checked in detail by readFulfillment
+  fulfillment: "object",
 } as const satisfies Record<keyof ProductFields, string>;
 
 const isField = (key: string): key is keyof ProductFields => Object.hasOwn(FIELD_TYPES, key);
@@ -82,17 +118,60 @@ function readFields(body: Record<string, unknown>): Partial<ProductFields> {
   const fieldErrors: Record<string, string> = {};
   for (const key of Object.keys(body)) {
     if (!isField(key)) fieldErrors[key] = "This can't be set on a product.";
-    else if (typeof body[key] !== FIELD_TYPES[key] && !(key === "state" && body[key] === null))
+    else if (
+      (typeof body[key] !== FIELD_TYPES[key] && !(key === "state" && body[key] === null)) ||
+      (key === "fulfillment" && (body[key] === null || Array.isArray(body[key])))
+    )
       fieldErrors[key] = "This value isn't valid.";
   }
   if (Object.keys(fieldErrors).length)
     throw new HttpError(400, "Some of these details can't be set on a product.", fieldErrors);
   const fields = { ...body } as Partial<ProductFields>;
+  if (fields.fulfillment !== undefined) fields.fulfillment = readFulfillment(body.fulfillment as Record<string, unknown>);
   if (fields.name !== undefined) fields.name = cleanText(fields.name);
   if (fields.description !== undefined) fields.description = cleanText(fields.description, true);
   if (fields.area !== undefined) fields.area = cleanText(fields.area);
   if ((fields.state as string | undefined) === "") fields.state = null;
   return fields;
+}
+
+const FULFILLMENT_SHAPE = {
+  pickup: { enabled: "boolean", instructions: "string" },
+  delivery: { enabled: "boolean", areas: "string", timing: "string", instructions: "string" },
+} as const;
+
+/**
+ * Both methods, every key present and of the right type, nothing else.
+ * Field errors are keyed like "fulfillment.delivery.areas".
+ */
+function readFulfillment(value: Record<string, unknown>): ProductFulfillment {
+  const fieldErrors: Record<string, string> = {};
+  for (const key of Object.keys(value))
+    if (!Object.hasOwn(FULFILLMENT_SHAPE, key)) fieldErrors[`fulfillment.${key}`] = "This can't be set on a product.";
+  for (const [method, shape] of Object.entries(FULFILLMENT_SHAPE)) {
+    const part = value[method];
+    if (typeof part !== "object" || part === null || Array.isArray(part)) {
+      fieldErrors[`fulfillment.${method}`] = "This value isn't valid.";
+      continue;
+    }
+    const record = part as Record<string, unknown>;
+    for (const key of Object.keys(record))
+      if (!Object.hasOwn(shape, key)) fieldErrors[`fulfillment.${method}.${key}`] = "This can't be set on a product.";
+    for (const [key, type] of Object.entries(shape))
+      if (typeof record[key] !== type) fieldErrors[`fulfillment.${method}.${key}`] = "This value isn't valid.";
+  }
+  if (Object.keys(fieldErrors).length)
+    throw new HttpError(400, "Some of these details can't be set on a product.", fieldErrors);
+  const f = value as ProductFulfillment;
+  return {
+    pickup: { enabled: f.pickup.enabled, instructions: cleanText(f.pickup.instructions, true) },
+    delivery: {
+      enabled: f.delivery.enabled,
+      areas: cleanText(f.delivery.areas),
+      timing: cleanText(f.delivery.timing),
+      instructions: cleanText(f.delivery.instructions, true),
+    },
+  };
 }
 
 function throwIfErrors(errors: Record<string, string | undefined>) {
@@ -112,6 +191,15 @@ function check(fields: Partial<ProductFields>) {
     state: fields.state === undefined ? undefined : validateProductState(fields.state),
     area: fields.area === undefined ? undefined : validateProductArea(fields.area),
   });
+  const f = fields.fulfillment;
+  if (f)
+    throwIfErrors({
+      fulfillment: validateFulfillmentMethods(f.pickup.enabled, f.delivery.enabled),
+      "fulfillment.pickup.instructions": validatePickupInstructions(f.pickup.instructions),
+      "fulfillment.delivery.areas": validateDeliveryAreas(f.delivery.areas, f.delivery.enabled),
+      "fulfillment.delivery.timing": validateDeliveryTiming(f.delivery.timing),
+      "fulfillment.delivery.instructions": validateDeliveryInstructions(f.delivery.instructions),
+    });
 }
 
 export function parseNewProduct(body: Record<string, unknown>): ProductFields {
@@ -134,6 +222,7 @@ export function parseNewProduct(body: Record<string, unknown>): ProductFields {
     active: fields.active ?? true,
     state: fields.state ?? null,
     area: fields.area ?? "",
+    fulfillment: fields.fulfillment ?? structuredClone(DEFAULT_FULFILLMENT),
   };
 }
 
@@ -163,7 +252,7 @@ export function parseProductUpdate(body: Record<string, unknown>): ProductUpdate
 
 // --- the seller's own listings -----------------------------------------------------
 
-const ownedBy = (sellerUserId: ObjectId, _id: ObjectId) => ({ _id, sellerUserId, archivedAt: null });
+export const ownedBy = (sellerUserId: ObjectId, _id: ObjectId) => ({ _id, sellerUserId, archivedAt: null });
 
 export async function listOwnProducts(sellerUserId: ObjectId): Promise<Product[]> {
   const docs = await (await products())
@@ -192,6 +281,7 @@ export async function createProduct(sellerUserId: ObjectId, fields: ProductField
     sellerUserId,
     ...fields,
     archivedAt: null,
+    images: [],
     searchTerms: searchTermsFor(fields.category),
     ratingCount: 0,
     ratingAverage: null,
@@ -266,6 +356,8 @@ export function toMarketProduct(doc: ProductDoc, names: Map<string, string>, vie
     own: doc.sellerUserId.equals(viewerId),
     state: doc.state ?? null,
     area: doc.area ?? "",
+    images: toProductImages(doc.images),
+    fulfillment: fulfillmentOf(doc),
     rating: count > 0 && typeof doc.ratingAverage === "number" ? { average: doc.ratingAverage, count } : null,
   };
 }

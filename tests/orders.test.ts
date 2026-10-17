@@ -70,7 +70,7 @@ async function listProduct(cookie: string, overrides: Partial<typeof EGGS> = {})
 
 function place(cookie: string, items: { productId: string; quantity: number }[], extra: Record<string, unknown> = {}) {
   return call<OrderResponse>(placeRoute, "/api/orders", {
-    body: { items, deliveryNote: NOTE, idempotencyKey: randomUUID(), ...extra },
+    body: { items, fulfillmentMethod: "pickup", deliveryNote: NOTE, idempotencyKey: randomUUID(), ...extra },
     cookie,
   });
 }

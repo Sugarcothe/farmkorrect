@@ -3,11 +3,13 @@ import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
 import type { NigerianState } from "@/lib/locations/nigeria";
 import type {
+  FulfillmentMethod,
   FulfillmentStatus,
   OrderActor,
   OrderEventName,
   PaymentStatus,
   ProductCategory,
+  ProductFulfillment,
   ProductUnit,
 } from "@/lib/orders/types";
 import type { CredentialStatus } from "@/lib/profile/types";
@@ -417,6 +419,14 @@ export type ProductDoc = {
   state?: NigerianState | null;
   area?: string;
   /**
+   * Photos, main one first (at most PRODUCT_PHOTO_RULES.maxPhotos). The
+   * bytes are at Cloudinary; publicId is always one the server generated.
+   * Absent on listings made before photos existed.
+   */
+  images?: ProductImageDoc[];
+  /** absent on older listings, which are pickup only (DEFAULT_FULFILLMENT) */
+  fulfillment?: ProductFulfillment;
+  /**
    * Derived search data, never set from a request:
    * - searchTerms: the category's name and the everyday words for it
    *   (catalog.ts), so "broilers" finds live birds;
@@ -431,6 +441,16 @@ export type ProductDoc = {
   ratingGen?: number;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type ProductImageDoc = {
+  /** our own id for the photo, used in API paths */
+  id: string;
+  publicId: string;
+  url: string;
+  width: number;
+  height: number;
+  addedAt: Date;
 };
 
 /** What was bought, as priced on the server when the order was placed. */
@@ -458,7 +478,7 @@ export type OrderDoc = {
   sellerUserId: ObjectId;
   /** sent by the browser, unique per buyer: a resubmission returns this order */
   idempotencyKey: string;
-  /** SHA-256 of the items and note, to tell a resubmission from a different order */
+  /** SHA-256 of the items, method and note, to tell a resubmission from a different order */
   requestHash: string;
   buyerName: string;
   sellerName: string;
@@ -467,6 +487,14 @@ export type OrderDoc = {
   totalKobo: number;
   currency: Currency;
   deliveryNote: string;
+  /**
+   * The chosen method and each product's details as they were when the
+   * order was placed. Absent on orders placed before fulfilment options.
+   */
+  fulfillment?: {
+    method: FulfillmentMethod;
+    details: Array<{ productId: ObjectId; name: string; areas: string; timing: string; instructions: string }>;
+  };
   paymentStatus: PaymentStatus;
   fulfillmentStatus: FulfillmentStatus;
   /** the reference of the payment that paid it */

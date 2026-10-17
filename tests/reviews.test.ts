@@ -48,7 +48,7 @@ async function listProduct(cookie: string) {
 
 async function place(cookie: string, productId: string) {
   const res = await call<OrderResponse>(placeRoute, "/api/orders", {
-    body: { items: [{ productId, quantity: 1 }], deliveryNote: NOTE, idempotencyKey: randomUUID() },
+    body: { items: [{ productId, quantity: 1 }], fulfillmentMethod: "pickup", deliveryNote: NOTE, idempotencyKey: randomUUID() },
     cookie,
   });
   expect(res.status).toBe(201);
