@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icons";
 import { Switch } from "@/components/ui/switch";
+import { isNigerianState, NIGERIAN_STATES } from "@/lib/locations/nigeria";
 import { archiveProduct, createProduct, updateProduct, type ProductUpdateRequest } from "@/lib/orders/api";
 import { PRODUCT_CATEGORIES, PRODUCT_LIMITS, PRODUCT_UNITS, type Product, type ProductFields } from "@/lib/orders/types";
 import {
   validatePriceKobo,
+  validateProductArea,
   validateProductCategory,
   validateProductDescription,
   validateProductName,
@@ -30,7 +32,13 @@ type Values = {
   price: string;
   stock: string;
   active: boolean;
+  /** a state value, NO_STATE, or "" when nothing was chosen */
+  state: string;
+  area: string;
 };
+
+const NO_STATE = "none";
+const STATE_OPTIONS = [{ value: NO_STATE, label: "Not specified" }, ...NIGERIAN_STATES];
 
 const LIST_PATH = "/market/listings";
 const DISCARD_MESSAGE = "Discard your unsaved changes?";
@@ -43,10 +51,13 @@ const FORM_FIELD: Record<string, keyof Values> = {
   priceKobo: "price",
   stockQuantity: "stock",
   active: "active",
+  state: "state",
+  area: "area",
 };
 
 function initialValues(product?: Product): Values {
-  if (!product) return { name: "", category: "", description: "", unit: "", price: "", stock: "", active: true };
+  if (!product)
+    return { name: "", category: "", description: "", unit: "", price: "", stock: "", active: true, state: "", area: "" };
   return {
     name: product.name,
     category: product.category,
@@ -55,6 +66,8 @@ function initialValues(product?: Product): Values {
     price: koboToInput(product.priceKobo),
     stock: String(product.stockQuantity),
     active: product.active,
+    state: product.state ?? "",
+    area: product.area,
   };
 }
 
@@ -69,6 +82,8 @@ function toFields(v: Values): ProductFields {
     priceKobo: parseNairaToKobo(v.price) ?? NaN,
     stockQuantity: parseStock(v.stock),
     active: v.active,
+    state: isNigerianState(v.state) ? v.state : null,
+    area: cleanText(v.area),
   };
 }
 
@@ -100,6 +115,7 @@ export function ProductForm({ product }: { product?: Product }) {
           ? "Enter the price as a number, like 4500."
           : validatePriceKobo(price),
       stock: !v.stock.trim() ? "Enter how many you have." : validateStockQuantity(parseStock(v.stock)),
+      area: validateProductArea(v.area),
     };
   });
 
@@ -202,6 +218,19 @@ export function ProductForm({ product }: { product?: Product }) {
             placeholder="e.g. 20"
             hint={editing ? "Orders reduce this automatically; cancelled unpaid orders add it back." : "How many you can sell now."}
             {...form.field("stock")}
+          />
+          <SelectField
+            label="State"
+            placeholder="Where is it? (optional)"
+            options={STATE_OPTIONS}
+            hint="Where the produce is, or is picked up from. Buyers can filter the Market by state."
+            {...form.field("state")}
+          />
+          <TextField
+            label="Town or area (optional)"
+            placeholder="e.g. Nsukka"
+            maxLength={PRODUCT_LIMITS.area.max + 20}
+            {...form.field("area")}
           />
           <TextAreaField
             label="Description (optional)"

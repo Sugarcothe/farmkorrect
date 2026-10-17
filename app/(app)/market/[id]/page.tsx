@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { productPlace } from "@/components/market/product-card";
 import { BuyForm } from "@/components/orders/buy-form";
 import { categoryLabel, unitLabel } from "@/components/orders/order-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
@@ -39,6 +40,7 @@ export default async function MarketProductPage({
   const { user } = await requireVerifiedPageSession();
   const product = await findMarketProduct(user._id, (await params).id);
   if (!product) notFound();
+  const place = productPlace(product);
   const reviews = await loadReviews(user._id, product.id, reviewPage(first((await searchParams).reviews)));
 
   return (
@@ -53,6 +55,12 @@ export default async function MarketProductPage({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {categoryLabel(product.category)} · sold by {product.own ? "you" : product.sellerName}
           </p>
+          {place && (
+            <p className="mt-1 flex items-center gap-1 text-xs text-foreground/60">
+              <Icon name="map-pin" className="size-3.5 shrink-0" />
+              {place}
+            </p>
+          )}
           <p className="mt-3 text-2xl font-bold tabular-nums text-primary">
             {formatKobo(product.priceKobo)}{" "}
             <span className="text-sm font-medium text-muted-foreground">{unitLabel(product.unit)}</span>

@@ -3,6 +3,7 @@
 // decided on the server: the browser only ever sends product ids,
 // quantities, a delivery note and an idempotency key.
 
+import type { NigerianState } from "@/lib/locations/nigeria";
 import type { Currency } from "@/lib/wallet/types";
 
 export const PRODUCT_CATEGORIES = [
@@ -28,6 +29,8 @@ export type ProductUnit = (typeof PRODUCT_UNITS)[number]["value"];
 export const PRODUCT_LIMITS = {
   name: { min: 3, max: 80 },
   description: { max: 600 },
+  /** town, area or LGA shown next to the state */
+  area: { max: 60 },
   /** ₦1 to ₦10,000,000 per unit */
   priceKobo: { min: 100, max: 1_000_000_000 },
   stock: { max: 100_000 },
@@ -53,6 +56,10 @@ export type ProductFields = {
   priceKobo: number;
   stockQuantity: number;
   active: boolean;
+  /** where the produce is, or is picked up from; null when the seller hasn't said */
+  state: NigerianState | null;
+  /** optional town, area or LGA within the state ("" when not given) */
+  area: string;
 };
 
 /** One of the signed-in seller's own listings. */
@@ -70,6 +77,11 @@ export type MarketProduct = {
   sellerName: string;
   /** the signed-in user's own listing (they can't buy it) */
   own: boolean;
+  /** null when the seller hasn't given a location */
+  state: NigerianState | null;
+  area: string;
+  /** from published reviews only; null when there are none */
+  rating: { average: number; count: number } | null;
 };
 
 /**
