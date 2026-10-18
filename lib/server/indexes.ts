@@ -19,6 +19,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     },
     // credential decisions whose notifications still have to be created
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+    // admin analytics: registrations in a period
+    { key: { createdAt: 1 }, name: "created" },
   ],
   [COLLECTIONS.sessions]: [
     { key: { tokenHash: 1 }, name: "token_unique", unique: true },
@@ -86,6 +88,9 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { userId: 1, sequence: -1 }, name: "user_sequence", unique: true },
     { key: { "source.type": 1, "source.id": 1 }, name: "source" },
     { key: { payoutId: 1 }, name: "payout", partialFilterExpression: { payoutId: { $type: "objectId" } } },
+    // analytics: a seller's ledger flows in a period, and the platform's
+    { key: { userId: 1, createdAt: 1 }, name: "user_created" },
+    { key: { createdAt: 1, type: 1 }, name: "created_type" },
   ],
   [COLLECTIONS.fulfillments]: [
     { key: { sourceType: 1, sourceId: 1 }, name: "source_unique", unique: true },
@@ -100,6 +105,11 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
     // payouts flagged for a person to look at (admin exceptions)
     { key: { updatedAt: -1 }, name: "flagged", partialFilterExpression: { issue: { $type: "string" } } },
+    // analytics: payouts requested, paid or failed in a period
+    { key: { userId: 1, requestedAt: 1 }, name: "user_requested" },
+    { key: { requestedAt: 1 }, name: "requested" },
+    { key: { paidAt: 1 }, name: "paid" },
+    { key: { failedAt: 1 }, name: "failed" },
   ],
   [COLLECTIONS.products]: [
     { key: { sellerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "seller_current" },
@@ -119,6 +129,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
       // no product field picks its own language
       language_override: "textLanguage",
     },
+    // admin analytics: listings created in a period
+    { key: { createdAt: 1 }, name: "created" },
   ],
   [COLLECTIONS.orders]: [
     { key: { number: 1 }, name: "number_unique", unique: true },
@@ -140,6 +152,14 @@ const INDEXES: Record<string, IndexDescription[]> = {
       partialFilterExpression: { "issue.reportedAt": { $type: "date" } },
     },
     { key: { updatedAt: -1 }, name: "flagged", partialFilterExpression: { reviewIssue: { $type: "string" } } },
+    // analytics: orders paid, delivered or cancelled in a period, per seller and overall
+    { key: { sellerUserId: 1, paidAt: 1 }, name: "seller_paid" },
+    { key: { sellerUserId: 1, deliveredAt: 1 }, name: "seller_delivered" },
+    { key: { sellerUserId: 1, cancelledAt: 1 }, name: "seller_cancelled" },
+    { key: { paidAt: 1 }, name: "paid" },
+    { key: { createdAt: 1 }, name: "created" },
+    { key: { deliveredAt: 1 }, name: "delivered" },
+    { key: { cancelledAt: 1 }, name: "cancelled" },
   ],
   [COLLECTIONS.payments]: [
     { key: { reference: 1 }, name: "reference_unique", unique: true },
@@ -165,6 +185,9 @@ const INDEXES: Record<string, IndexDescription[]> = {
       partialFilterExpression: { kind: "late_payment" },
     },
     { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
+    // analytics: refunds processed (or failed) in a period
+    { key: { status: 1, kind: 1, processedAt: 1 }, name: "status_processed" },
+    { key: { status: 1, failedAt: 1 }, name: "status_failed" },
   ],
   [COLLECTIONS.reviews]: [
     // one review per customer per product, whatever its status
@@ -228,6 +251,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // a promotion's results
     { key: { promotionId: 1, status: 1 }, name: "promotion_status" },
     { key: { sellerUserId: 1, reservedAt: -1 }, name: "seller_recent" },
+    // analytics: a seller's redeemed uses in a period and uses held now
+    { key: { sellerUserId: 1, status: 1, redeemedAt: 1 }, name: "seller_status" },
   ],
 };
 

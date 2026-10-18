@@ -43,6 +43,9 @@ export const LIMITS = {
   notificationReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   notificationWritesPerUser: { limit: 300, windowMs: 15 * 60_000 },
   pushSubscriptionChangesPerUser: { limit: 20, windowMs: 60 * 60_000 },
+  analyticsReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  // CSV downloads (sellers and admins)
+  analyticsExportsPerUser: { limit: 30, windowMs: 60 * 60_000 },
   adminReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   adminActionsPerUser: { limit: 300, windowMs: 60 * 60_000 },
   webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },

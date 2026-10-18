@@ -38,6 +38,7 @@ export default async function ProfilePage({
       ? [
           { href: "/market/listings", label: "My Listings", icon: "store" as const },
           { href: "/sales", label: "Sales", icon: "wallet" as const },
+          { href: "/market/insights", label: "Sales Insights", icon: "list" as const },
         ]
       : [{ href: "/market", label: "Market", icon: "store" as const }]),
   ];

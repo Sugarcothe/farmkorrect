@@ -44,6 +44,9 @@ export default async function ListingsPage({
         <Link href="/market/promotions" className={buttonClasses("outline")}>
           Promotions &amp; coupon codes
         </Link>
+        <Link href="/market/insights" className={buttonClasses("outline")}>
+          Sales insights
+        </Link>
         {products.length ? (
           <ListCard label="Your listings">
             {products.map((p) => (
