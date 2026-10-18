@@ -56,6 +56,11 @@ export const LIMITS = {
   appointmentCreatesPerUser: { limit: 20, windowMs: 60 * 60_000 },
   appointmentActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
   appointmentReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  // Other Services (docs/other-services.md)
+  serviceSearchesPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  serviceBookingCreatesPerUser: { limit: 20, windowMs: 60 * 60_000 },
+  serviceBookingActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  serviceBookingReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   // Korret Academy
   trainingReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   // playback positions are saved every 15 s at most while a video plays

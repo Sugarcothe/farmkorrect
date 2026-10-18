@@ -22,7 +22,7 @@ import {
 import { getResendConfig, getTermiiConfig, getWebPushConfig } from "./config";
 import { getDb, getMongoClient } from "./db";
 import { HttpError } from "./http";
-import { formatSlot } from "@/lib/vets/schedule";
+import { formatDay, formatSlot } from "@/lib/vets/schedule";
 import {
   type AppointmentDoc,
   COLLECTIONS,
@@ -36,6 +36,7 @@ import {
   type ProductDoc,
   type PushSubscriptionDoc,
   type ReviewDoc,
+  type ServiceBookingDoc,
   type UserDoc,
 } from "./models";
 
@@ -387,6 +388,107 @@ export function appointmentEventSpecs(appointment: AppointmentDoc, index: number
   }
 }
 
+/**
+ * The inbox entries a service booking history item produces: the other
+ * party hears about each change. Only the service name, the booked day and
+ * the reference: never the address, a phone number or the amount.
+ */
+export function serviceBookingEventSpecs(booking: ServiceBookingDoc, index: number): NotificationSpec[] {
+  const item = booking.history[index];
+  if (!item) return [];
+  const id = booking._id.toHexString();
+  const what = `${clip(booking.service.name, 60)} (${booking.reference})`;
+  const when = formatDay(booking.schedule.date);
+  const spec = (
+    recipientUserId: ObjectId,
+    url: string,
+    type: NotificationType,
+    title: string,
+    body: string,
+  ): NotificationSpec => ({
+    recipientUserId,
+    type,
+    title,
+    body,
+    url,
+    eventKey: `service_booking:${id}:${index}:${item.event}`,
+    subject: { kind: "service_booking", id },
+    eventAt: item.at,
+  });
+  const customer = (type: NotificationType, title: string, body: string) =>
+    spec(booking.customerUserId, `/services/bookings/${id}`, type, title, body);
+  const provider = (type: NotificationType, title: string, body: string) =>
+    spec(booking.providerUserId, `/services/jobs/${id}`, type, title, body);
+  switch (item.event) {
+    case "requested":
+      return [
+        provider("service_booking_requested", "New service request", `${what} for ${when}. Respond in Service jobs.`),
+      ];
+    case "quote_offered":
+      return [
+        customer("service_booking_quote_offered", "You have a quote", `The provider priced ${what}. Accept it to pay.`),
+      ];
+    case "awaiting_payment":
+      // only after a quote: a fixed-price booking starts here and nobody needs telling
+      return booking.quote && item.by === "customer"
+        ? [
+            provider(
+              "service_booking_quote_accepted",
+              "Quote accepted",
+              `The customer accepted your quote for ${what}.`,
+            ),
+          ]
+        : [];
+    case "paid":
+      return [customer("service_booking_paid", "Payment received", `We received your payment for ${what}.`)];
+    case "payment_failed":
+      return [
+        customer(
+          "service_booking_payment_failed",
+          "Payment didn't go through",
+          `Your payment for ${what} failed. You can try again.`,
+        ),
+      ];
+    case "confirmed":
+      return item.by === "system"
+        ? [provider("service_booking_confirmed", "Job confirmed", `The customer paid your quote for ${what}, ${when}.`)]
+        : [customer("service_booking_confirmed", "Booking confirmed", `The provider accepted ${what}, ${when}.`)];
+    case "declined":
+      return [customer("service_booking_declined", "Booking declined", `The provider declined ${what}.`)];
+    case "cancelled":
+      return item.by === "customer"
+        ? [provider("service_booking_cancelled", "Booking cancelled", `The customer cancelled ${what}.`)]
+        : [customer("service_booking_cancelled", "Booking cancelled", `The provider cancelled ${what}.`)];
+    case "expired":
+      return [
+        customer("service_booking_expired", "Booking lapsed", `${what} lapsed before it was confirmed.`),
+        provider("service_booking_expired", "Booking lapsed", `${what} lapsed before it was confirmed.`),
+      ];
+    case "provider_en_route":
+      return [customer("service_booking_en_route", "Provider on the way", `Your provider is on the way for ${what}.`)];
+    case "in_progress":
+      return [customer("service_booking_started", "Work started", `The provider started ${what}.`)];
+    case "completed":
+      return [customer("service_booking_completed", "Job completed", `${what} was marked completed by the provider.`)];
+    case "refund_processed":
+    case "late_payment_refunded":
+      return [
+        customer("service_booking_refund_processed", "Refund processed", `Your payment for ${what} was refunded.`),
+      ];
+    case "refund_failed":
+      return [
+        customer(
+          "service_booking_refund_failed",
+          "Refund delayed",
+          `Your refund for ${what} needs attention. We're looking into it.`,
+        ),
+      ];
+    default:
+      // requested after payment is told to the provider above; nothing else to send
+      return [];
+  }
+}
+
 export function passwordChangedSpec(userId: ObjectId, resetId: ObjectId, at: Date): NotificationSpec {
   return {
     recipientUserId: userId,
@@ -666,12 +768,26 @@ export async function syncAppointmentNotifications(appointmentId: ObjectId, now 
   await markSynced(appointments, appointmentId, length);
 }
 
+export async function syncServiceBookingNotifications(bookingId: ObjectId, now = new Date()): Promise<void> {
+  const db = await getDb();
+  const bookings = db.collection<ServiceBookingDoc>(COLLECTIONS.serviceBookings);
+  const booking = await bookings.findOne({ _id: bookingId });
+  if (!booking || !booking.notifySyncAt) return;
+  const length = booking.history.length;
+  const specs: NotificationSpec[] = [];
+  for (let i = booking.notifiedThrough ?? 0; i < length; i++) {
+    if (!tooOld(booking.history[i].at, now)) specs.push(...serviceBookingEventSpecs(booking, i));
+  }
+  await createNotifications(specs, now);
+  await markSynced(bookings, bookingId, length);
+}
+
 /**
  * Clears the flag only if no history item was added meanwhile (a later
  * change keeps it set for the next sync); either way records how far the
  * history has been turned into notifications.
  */
-async function markSynced<T extends OrderDoc | PayoutDoc | AppointmentDoc>(collection: Collection<T>, id: ObjectId, length: number) {
+async function markSynced<T extends OrderDoc | PayoutDoc | AppointmentDoc | ServiceBookingDoc>(collection: Collection<T>, id: ObjectId, length: number) {
   const cleared = await collection.updateOne(
     { _id: id, [`history.${length}`]: { $exists: false } } as Filter<T>,
     { $set: { notifySyncAt: null }, $max: { notifiedThrough: length } } as UpdateFilter<T>,
@@ -777,6 +893,7 @@ export async function sweepNotificationSync(limit: number, now = new Date()) {
   await run(await ids(COLLECTIONS.payoutAccounts), syncBankAccountNotification);
   await run(await ids(COLLECTIONS.users), syncCredentialNotification);
   await run(await ids(COLLECTIONS.appointments), syncAppointmentNotifications);
+  await run(await ids(COLLECTIONS.serviceBookings), syncServiceBookingNotifications);
   return { synced, failed };
 }
 

@@ -1,3 +1,6 @@
+import type { NigerianState } from "@/lib/locations/nigeria";
+import type { ServicePricing } from "./config";
+
 // Public shapes for the Services & Pricing API (the `data` of an ApiResult).
 // The owner is never part of these: it is always the signed-in account.
 
@@ -16,6 +19,12 @@ export type Service = {
   bookingAvailable: boolean;
   /** active && bookingAvailable */
   bookable: boolean;
+  /** marketplace services only (null / empty otherwise) */
+  pricing: ServicePricing | null;
+  serviceStates: NigerianState[];
+  included: string;
+  excluded: string;
+  requirements: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -28,6 +37,19 @@ export type ServiceFields = {
   durationMinutes: number | null;
   active: boolean;
   bookingAvailable: boolean;
+} & Partial<MarketplaceFields>;
+
+/**
+ * Extra details a marketplace service (docs/other-services.md) carries.
+ * Pricing and at least one state are required for those categories and
+ * refused for every other one. A "quote" service is stored with price 0.
+ */
+export type MarketplaceFields = {
+  pricing: ServicePricing;
+  serviceStates: NigerianState[];
+  included: string;
+  excluded: string;
+  requirements: string;
 };
 
 /** POST /api/services; `active` and `bookingAvailable` default to true. */

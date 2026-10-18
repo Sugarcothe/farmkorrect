@@ -30,6 +30,12 @@ export const NOTIFICATION_CATEGORIES = [
     description: "Appointment requests, a vet accepting or declining, visits starting or finishing, and cancellations.",
   },
   {
+    value: "bookings",
+    label: "Service bookings",
+    description:
+      "Bookings of farm services: requests, quotes, payments, providers on the way, completions and refunds.",
+  },
+  {
     value: "reviews",
     label: "Reviews & marketplace",
     description: "New reviews on your listings, moderation of your reviews and checks of your credentials.",
@@ -111,6 +117,21 @@ export const NOTIFICATION_TYPES = {
   appointment_expired: { category: "appointments", icon: "alert-circle", channels: ["email", "push"] },
   appointment_en_route: { category: "appointments", icon: "list", channels: ["push"] },
   appointment_completed: { category: "appointments", icon: "check-circle", channels: ["email", "push"] },
+  // Other Services bookings (customer and provider)
+  service_booking_requested: { category: "bookings", icon: "list", channels: ["email", "sms", "push"] },
+  service_booking_quote_offered: { category: "bookings", icon: "wallet", channels: ["email", "sms", "push"] },
+  service_booking_quote_accepted: { category: "bookings", icon: "check-circle", channels: ["email", "push"] },
+  service_booking_paid: { category: "bookings", icon: "wallet", channels: ["email", "push"] },
+  service_booking_payment_failed: { category: "bookings", icon: "alert-circle", channels: ["email", "push"] },
+  service_booking_confirmed: { category: "bookings", icon: "check-circle", channels: ["email", "sms", "push"] },
+  service_booking_declined: { category: "bookings", icon: "x", channels: ["email", "push"] },
+  service_booking_cancelled: { category: "bookings", icon: "x", channels: ["email", "sms", "push"] },
+  service_booking_expired: { category: "bookings", icon: "alert-circle", channels: ["email", "push"] },
+  service_booking_en_route: { category: "bookings", icon: "list", channels: ["push"] },
+  service_booking_started: { category: "bookings", icon: "list", channels: ["push"] },
+  service_booking_completed: { category: "bookings", icon: "check-circle", channels: ["email", "push"] },
+  service_booking_refund_processed: { category: "bookings", icon: "wallet", channels: ["email", "sms", "push"] },
+  service_booking_refund_failed: { category: "bookings", icon: "alert-circle", channels: ["email", "push"] },
   // the account
   bank_account_added: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
   bank_account_changed: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
@@ -174,6 +195,7 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   payouts: { email: true, sms: true, push: true },
   security: { email: true, sms: true, push: true },
   appointments: { email: true, sms: true, push: true },
+  bookings: { email: true, sms: true, push: true },
   reviews: { email: false, sms: false, push: true },
 };
 

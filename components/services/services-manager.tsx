@@ -162,7 +162,9 @@ function ServiceCard({
           </h4>
           <p className="mt-0.5 text-xs font-medium text-primary">{categoryLabel(role, service.category)}</p>
         </div>
-        <p className="shrink-0 text-base font-semibold text-foreground">{formatNaira(service.priceNgn)}</p>
+        <p className="shrink-0 text-base font-semibold text-foreground">
+          {service.pricing === "quote" ? "Quote" : formatNaira(service.priceNgn)}
+        </p>
       </div>
 
       <p className="mt-2 line-clamp-3 text-sm leading-relaxed whitespace-pre-line text-muted-foreground">

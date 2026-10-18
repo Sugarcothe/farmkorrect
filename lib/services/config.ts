@@ -10,7 +10,74 @@ export type ServiceCategory = {
   label: string;
   /** whether a price of ₦0 ("Free") makes sense for this kind of service */
   allowsFree: boolean;
+  /** listed in the Other Services marketplace, where customers book and pay for it */
+  marketplace?: true;
 };
+
+/**
+ * The Other Services marketplace (docs/other-services.md). Customers find
+ * these in the Services directory, book them and pay through the app.
+ */
+export const MARKETPLACE_CATEGORIES = [
+  {
+    value: "farm-fumigation",
+    label: "Farm Fumigation",
+    description: "Pest, insect and disease control for poultry houses, stores and hatcheries.",
+  },
+  {
+    value: "recruitment",
+    label: "Recruitment",
+    description: "Finding farm hands, attendants and managers for your farm.",
+  },
+  {
+    value: "transportation",
+    label: "Transportation",
+    description: "Moving live birds, eggs, feed or equipment from one place to another.",
+  },
+  { value: "logistics", label: "Logistics", description: "Pickup, storage and delivery of farm goods and supplies." },
+  {
+    value: "sales-connection",
+    label: "Sales Connection",
+    description: "Connecting your birds, eggs and produce with buyers.",
+  },
+  {
+    value: "installation",
+    label: "Installation",
+    description: "Setting up drinkers, feeders, cages, lighting, ventilation and brooders.",
+  },
+  {
+    value: "maintenance",
+    label: "Maintenance",
+    description: "Servicing and repairing farm equipment, generators and boreholes.",
+  },
+] as const;
+
+export type MarketplaceCategory = (typeof MARKETPLACE_CATEGORIES)[number]["value"];
+
+/**
+ * Which marketplace categories each role may offer. Specialists provide
+ * technical and support services; farmers with vehicles may move goods for
+ * other farmers; vets offer their own services through Find a Vet only.
+ */
+export const MARKETPLACE_ROLES: Record<Role, readonly MarketplaceCategory[]> = {
+  "poultry-farmer": ["transportation", "logistics"],
+  veterinarian: [],
+  "non-vet-specialist": MARKETPLACE_CATEGORIES.map((c) => c.value),
+};
+
+const marketplaceFor = (role: Role): ServiceCategory[] =>
+  MARKETPLACE_CATEGORIES.filter((c) => MARKETPLACE_ROLES[role].includes(c.value)).map((c) => ({
+    value: c.value,
+    label: c.label,
+    allowsFree: false,
+    marketplace: true,
+  }));
+
+export const isMarketplaceCategory = (value: unknown): value is MarketplaceCategory =>
+  MARKETPLACE_CATEGORIES.some((c) => c.value === value);
+
+export const marketplaceLabel = (value: string) =>
+  MARKETPLACE_CATEGORIES.find((c) => c.value === value)?.label ?? "Other";
 
 export const SERVICE_CATEGORIES: Record<Role, readonly ServiceCategory[]> = {
   // farm services and advice shared with other farmers — not products for
@@ -21,6 +88,7 @@ export const SERVICE_CATEGORIES: Record<Role, readonly ServiceCategory[]> = {
     { value: "brooding-rearing", label: "Brooding & Rearing", allowsFree: false },
     { value: "bird-processing", label: "Bird Processing & Dressing", allowsFree: false },
     { value: "equipment-hire", label: "Equipment Hire", allowsFree: false },
+    ...marketplaceFor("poultry-farmer"),
   ],
   veterinarian: [
     { value: "consultation", label: "Consultation", allowsFree: true },
@@ -30,6 +98,7 @@ export const SERVICE_CATEGORIES: Record<Role, readonly ServiceCategory[]> = {
     { value: "flock-health-check", label: "Routine Flock Health Check", allowsFree: false },
     { value: "post-mortem", label: "Post-mortem & Lab Referral", allowsFree: false },
     { value: "emergency-visit", label: "Emergency Farm Visit", allowsFree: false },
+    ...marketplaceFor("veterinarian"),
   ],
   // one category per specialization a specialist can hold, plus training
   "non-vet-specialist": [
@@ -40,6 +109,7 @@ export const SERVICE_CATEGORIES: Record<Role, readonly ServiceCategory[]> = {
     { value: "housing-equipment", label: "Housing & Equipment Setup", allowsFree: false },
     { value: "processing-marketing", label: "Processing & Marketing Advice", allowsFree: true },
     { value: "training", label: "Training & Workshops", allowsFree: true },
+    ...marketplaceFor("non-vet-specialist"),
   ],
 };
 
@@ -67,6 +137,8 @@ export const SERVICE_LIMITS = {
   maxPriceNgn: 10_000_000,
   /** services (not counting removed ones) one account can list */
   perOwner: 50,
+  /** marketplace services: what's included, excluded and what the customer must provide */
+  note: 300,
 } as const;
 
 /** Durations a service can be listed with; null means "varies". */
@@ -116,6 +188,15 @@ export function formatNaira(amount: number): string {
   if (amount === 0) return "Free";
   return `₦${String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 }
+
+/** How a marketplace service is priced: a fixed price paid when booking, or a quote from the provider. */
+export const SERVICE_PRICING = [
+  { value: "fixed", label: "Fixed price" },
+  { value: "quote", label: "Quote on request" },
+] as const;
+export type ServicePricing = (typeof SERVICE_PRICING)[number]["value"];
+export const isServicePricing = (value: unknown): value is ServicePricing =>
+  SERVICE_PRICING.some((p) => p.value === value);
 
 /** Only an active service that's also open for booking can ever be booked. */
 export function isBookable(service: { active: boolean; bookingAvailable: boolean }): boolean {

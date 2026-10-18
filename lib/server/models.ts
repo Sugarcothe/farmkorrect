@@ -22,6 +22,16 @@ import type {
   NotificationType,
 } from "@/lib/notifications/types";
 import type { ReviewStatus } from "@/lib/reviews/types";
+import type { MarketplaceCategory, ServicePricing } from "@/lib/services/config";
+import type {
+  BookingDetails,
+  ContactPreference,
+  ServiceBookingActor,
+  ServiceBookingEvent,
+  ServiceBookingStatus,
+  ServicePaymentStatus,
+  TimeWindow,
+} from "@/lib/services/marketplace";
 import type { CourseCategory, CourseStatus, Difficulty, StaffRole, StaffStatus } from "@/lib/training/types";
 import type { AppointmentActor, AppointmentPaymentStatus, BookingStatus, SlotMinutes, WeeklyHours } from "@/lib/vets/types";
 import type {
@@ -71,6 +81,9 @@ export const COLLECTIONS = {
   lessonProgress: "lesson_progress",
   farmStaff: "farm_staff",
   trainingPrograms: "training_programs",
+  serviceBookings: "service_bookings",
+  servicePayments: "service_payments",
+  serviceRefunds: "service_refunds",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -224,6 +237,17 @@ export type ServiceDoc = {
   bookingAvailable: boolean;
   /** set when the owner removes the service; it's then hidden everywhere */
   archivedAt: Date | null;
+  /**
+   * Other Services marketplace categories only (docs/other-services.md);
+   * absent on every other service. A "quote" service has priceNgn 0.
+   */
+  pricing?: ServicePricing;
+  serviceStates?: NigerianState[];
+  included?: string;
+  excluded?: string;
+  requirements?: string;
+  /** directory search: words of the name, description and category (marketplace only) */
+  searchWords?: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -729,7 +753,10 @@ export type NotificationDoc = {
   /** e.g. order:<id>:<history index>:<event> */
   eventKey: string;
   /** what it's about, for support; ids only */
-  subject: { kind: "order" | "payout" | "review" | "bank_account" | "account" | "appointment"; id: string };
+  subject: {
+    kind: "order" | "payout" | "review" | "bank_account" | "account" | "appointment" | "service_booking";
+    id: string;
+  };
   /** when the business event happened */
   eventAt: Date;
   readAt: Date | null;
@@ -981,6 +1008,123 @@ export type AppointmentSlotDoc = {
   startsAt: Date;
   appointmentId: ObjectId;
   createdAt: Date;
+};
+
+// --- Other Services bookings (docs/other-services.md) ---------------------------------
+
+export type ServiceBookingHistoryDoc = {
+  event: ServiceBookingEvent;
+  by: ServiceBookingActor;
+  userId: ObjectId | null;
+  at: Date;
+  /** the customer's or provider's own short reason, when they gave one */
+  note: string | null;
+};
+
+/**
+ * One booking of a marketplace service. The service's name, category and
+ * pricing are copied in when it's made, so later edits never change it; the
+ * customer comes from the session and the provider from the service.
+ * `status` is the booking's progress and `paymentStatus` its money: a
+ * booking is only ever paid in full and only ever refunded in full.
+ */
+export type ServiceBookingDoc = {
+  _id: ObjectId;
+  /** shown to both parties, e.g. FK-SVC-7K2M9QXC */
+  reference: string;
+  customerUserId: ObjectId;
+  providerUserId: ObjectId;
+  serviceId: ObjectId;
+  service: { name: string; category: MarketplaceCategory; pricing: ServicePricing; durationMinutes: number | null };
+  details: BookingDetails;
+  schedule: { date: string; window: TimeWindow };
+  location: { address: string; state: NigerianState; directions: string };
+  contactPreference: ContactPreference;
+  notes: string;
+  status: ServiceBookingStatus;
+  /** the price agreed in kobo: the service's price (fixed) or the accepted quote; null before that */
+  amountKobo: number | null;
+  quote: { amountKobo: number; note: string; offeredAt: Date; validUntil: Date } | null;
+  paymentStatus: ServicePaymentStatus;
+  /** what Paystack confirmed for the paying attempt (0 until then) */
+  paidKobo: number;
+  paymentReference: string | null;
+  paidAt: Date | null;
+  refundedKobo: number;
+  /** the refund being sent, while one is */
+  refundInFlight: ObjectId | null;
+  /** the provider accepted the job (or offered the quote the customer accepted) */
+  acceptedAt: Date | null;
+  completedAt: Date | null;
+  /** an unanswered request lapses at this time */
+  respondBy: Date | null;
+  /** an unpaid booking lapses at this time */
+  payBy: Date | null;
+  /**
+   * `<serviceId>:<date>` while the booking is open, null once it's finished:
+   * unique per customer, so the same service can't be booked twice for one day
+   */
+  openKey: string | null;
+  idempotencyKey: string;
+  history: ServiceBookingHistoryDoc[];
+  /** the commission applied to the provider's earning, fixed once */
+  settlement: { policyId: string; rateBps: number; grossKobo: number; feeKobo: number; settledAt: Date } | null;
+  ledgerSyncAt: Date | null;
+  /** see NotificationDoc: set with each change that notifies someone */
+  notifySyncAt: Date | null;
+  notifiedThrough: number;
+  /** why a person needs to look at it (a payment or refund that didn't add up) */
+  reviewIssue: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** One attempt to collect a booking's price through Paystack (see PaymentDoc). */
+export type ServicePaymentDoc = {
+  _id: ObjectId;
+  bookingId: ObjectId;
+  customerUserId: ObjectId;
+  /** fsp_<payment id>: the Paystack transaction reference */
+  reference: string;
+  amountKobo: number;
+  currency: Currency;
+  status: PaymentAttemptStatus;
+  /** at most one per booking (a unique index) */
+  active: boolean;
+  authorizationUrl: string | null;
+  providerStatus: string | null;
+  providerTransactionId: number | null;
+  paidAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Money returned to a customer for a booking (see RefundDoc). "booking"
+ * refunds return the whole payment when a paid booking is declined,
+ * cancelled or lapses; "late_payment" returns a payment that arrived after
+ * the booking stopped waiting for one.
+ */
+export type ServiceRefundDoc = {
+  _id: ObjectId;
+  bookingId: ObjectId;
+  kind: "booking" | "late_payment";
+  /** fsr_<refund id>: our reference, also the ledger refund id */
+  reference: string;
+  paymentReference: string;
+  amountKobo: number;
+  currency: Currency;
+  reason: string;
+  status: RefundStatus;
+  providerRefundId: number | null;
+  providerStatus: string | null;
+  sentAt: Date | null;
+  processedAt: Date | null;
+  failedAt: Date | null;
+  lastCheckedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 // --- Korret Academy (docs/training-academy.md) -------------------------------------

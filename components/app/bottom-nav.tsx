@@ -14,21 +14,27 @@ const HIDDEN_ON = [
   /^\/wallet\/payout\/?$/,
   /^\/market\/listings\/(new|[^/]+\/edit)\/?$/,
   /^\/vets\/[^/]+\/book\/?$/,
+  /^\/services\/[^/]+\/book\/?$/,
   /^\/admin\/training\/[^/]+\/?$/,
 ];
 
 export function BottomNav({ tabs }: { tabs: readonly NavTab[] }) {
   const pathname = usePathname();
   if (HIDDEN_ON.some((pattern) => pattern.test(pathname))) return null;
+  // the most specific match wins, so /services/jobs lights up Jobs, not Services
+  const current = tabs
+    .map((tab) => tab.href)
+    .filter((href): href is string => href !== null && (pathname === href || pathname.startsWith(`${href}/`)))
+    .sort((x, y) => y.length - x.length)[0];
 
   return (
     <nav
       aria-label="Main"
       className="sticky bottom-0 z-10 shrink-0 border-t border-foreground/8 bg-white pb-[env(safe-area-inset-bottom)] md:pb-0"
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
         {tabs.map((tab) => {
-          const active = tab.href !== null && (pathname === tab.href || pathname.startsWith(`${tab.href}/`));
+          const active = tab.href !== null && tab.href === current;
           const content = (
             <>
               <Icon name={tab.icon} className="size-[22px]" />

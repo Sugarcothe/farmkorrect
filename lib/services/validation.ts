@@ -1,6 +1,7 @@
 import type { Role } from "@/lib/auth/types";
 import { cleanText } from "@/lib/profile/validation";
-import { isListedDuration, SERVICE_LIMITS, serviceCategory } from "./config";
+import { isNigerianState } from "@/lib/locations/nigeria";
+import { isListedDuration, isServicePricing, SERVICE_LIMITS, serviceCategory } from "./config";
 
 // Pure validators for a service; each returns an error message, or undefined
 // when valid. The form runs them as the user types and the API runs them
@@ -51,4 +52,22 @@ export function parsePriceInput(value: string): number {
   if (!compact) return NaN;
   if (/^-\d+(\.\d+)?$/.test(compact) || /^\d+\.\d+$/.test(compact)) return Number(compact);
   return /^\d+$/.test(compact) ? Number(compact) : NaN;
+}
+
+// --- marketplace services --------------------------------------------------------
+
+export function validatePricing(value: unknown) {
+  if (!isServicePricing(value)) return "Choose a fixed price or quote on request.";
+}
+
+export function validateServiceStates(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) return "Choose at least one state you serve.";
+  if (value.length > 37 || !value.every(isNigerianState)) return "Choose states from the list.";
+  if (new Set(value).size !== value.length) return "Each state can only be chosen once.";
+}
+
+/** Included / excluded / requirements: optional, short. */
+export function validateServiceNote(value: string) {
+  if (cleanText(value, true).length > SERVICE_LIMITS.note)
+    return `Keep this to ${SERVICE_LIMITS.note} characters or fewer.`;
 }

@@ -53,9 +53,51 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { ownerUserId: 1, createdAt: -1 }, name: "owner_recent" },
     { key: { farmType: 1 }, name: "farm_type" },
   ],
+  [COLLECTIONS.serviceBookings]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    { key: { customerUserId: 1, idempotencyKey: 1 }, name: "customer_idempotency", unique: true },
+    // the same service can't be booked twice for one day while a booking is open
+    {
+      key: { customerUserId: 1, openKey: 1 },
+      name: "customer_open_unique",
+      unique: true,
+      partialFilterExpression: { openKey: { $type: "string" } },
+    },
+    // My bookings and the provider's jobs, newest first
+    { key: { customerUserId: 1, createdAt: -1, _id: -1 }, name: "customer_recent" },
+    { key: { providerUserId: 1, createdAt: -1, _id: -1 }, name: "provider_recent" },
+    // the job: lapsing requests, quotes and unpaid bookings
+    { key: { status: 1, respondBy: 1 }, name: "respond_queue" },
+    { key: { status: 1, payBy: 1 }, name: "pay_queue" },
+    { key: { status: 1, "quote.validUntil": 1 }, name: "quote_queue" },
+    { key: { ledgerSyncAt: 1 }, name: "ledger_sync", partialFilterExpression: { ledgerSyncAt: { $type: "date" } } },
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+    { key: { updatedAt: -1 }, name: "flagged", partialFilterExpression: { reviewIssue: { $type: "string" } } },
+  ],
+  [COLLECTIONS.servicePayments]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    // one payable attempt per booking at a time
+    { key: { bookingId: 1 }, name: "one_active_per_booking", unique: true, partialFilterExpression: { active: true } },
+    { key: { bookingId: 1, createdAt: -1 }, name: "booking_recent" },
+    { key: { active: 1, updatedAt: 1 }, name: "active_queue" },
+  ],
+  [COLLECTIONS.serviceRefunds]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    { key: { bookingId: 1, createdAt: 1 }, name: "booking" },
+    // a booking's payment is refunded once, and a late payment is returned once
+    { key: { paymentReference: 1 }, name: "one_refund_per_payment", unique: true },
+    { key: { status: 1, updatedAt: 1 }, name: "status_queue" },
+  ],
   [COLLECTIONS.services]: [
     // an owner's current services, newest first
     { key: { ownerUserId: 1, archivedAt: 1, createdAt: -1 }, name: "owner_current" },
+    // the Other Services directory: listed marketplace services, newest first
+    {
+      key: { active: 1, bookingAvailable: 1, archivedAt: 1, createdAt: -1, _id: -1 },
+      name: "marketplace_recent",
+      partialFilterExpression: { pricing: { $type: "string" } },
+    },
+    { key: { searchWords: 1 }, name: "marketplace_words", partialFilterExpression: { pricing: { $type: "string" } } },
   ],
   [COLLECTIONS.payoutAccounts]: [
     // one account per owner receives payouts

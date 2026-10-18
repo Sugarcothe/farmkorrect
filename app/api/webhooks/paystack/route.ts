@@ -6,12 +6,14 @@ import { COLLECTIONS, type ProviderEventDoc } from "@/lib/server/models";
 import { handleChargeEvent, PAYMENT_REFERENCE } from "@/lib/server/order-payments";
 import { handleRefundEvent } from "@/lib/server/order-refunds";
 import { handleTransferEvent, isTransferEvent } from "@/lib/server/payouts";
+import { handleBookingChargeEvent, SERVICE_PAYMENT_REFERENCE } from "@/lib/server/service-payments";
+import { handleBookingRefundEvent } from "@/lib/server/service-refunds";
 import { isPaystackConfigured, isValidWebhookSignature, parseTransfer, type Json } from "@/lib/server/paystack";
 import { hit } from "@/lib/server/rate-limit";
 
 // Paystack's event notifications: transfer events settle payouts,
-// charge.success settles an order payment and refund.* settles an order
-// refund. Charge and refund events are only a prompt: the payment or refund
+// charge.success settles an order or service booking payment and refund.*
+// settles an order or booking refund. Charge and refund events are only a prompt: the payment or refund
 // is then looked up with Paystack's API and checked against the order, so
 // the event's own amounts are never trusted. The signature is checked on the exact raw bytes before anything
 // is parsed; unsigned or tampered requests get 401 and change nothing.
@@ -69,10 +71,16 @@ export const POST = route("webhooks/paystack", async (request) => {
     // our payment reference: data.reference on a charge, data.transaction_reference on a refund
     const field = kind === "charge" ? "reference" : "transaction_reference";
     const value = data && typeof data[field] === "string" ? data[field] : "";
-    // events for payments made outside the Market aren't ours
-    if (!PAYMENT_REFERENCE.test(value)) return ok({ received: true });
-    if (kind === "charge") await handleChargeEvent(value);
-    else await handleRefundEvent(value);
+    if (SERVICE_PAYMENT_REFERENCE.test(value)) {
+      // an Other Services booking payment (docs/other-services.md)
+      if (kind === "charge") await handleBookingChargeEvent(value);
+      else await handleBookingRefundEvent(value);
+    } else {
+      // events for payments made outside the Market aren't ours
+      if (!PAYMENT_REFERENCE.test(value)) return ok({ received: true });
+      if (kind === "charge") await handleChargeEvent(value);
+      else await handleRefundEvent(value);
+    }
     reference = value;
   }
   try {
