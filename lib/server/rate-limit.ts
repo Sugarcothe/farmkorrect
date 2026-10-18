@@ -49,6 +49,13 @@ export const LIMITS = {
   adminReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   adminActionsPerUser: { limit: 300, windowMs: 60 * 60_000 },
   webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },
+  // Find a Vet
+  vetSearchesPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  vetSlotReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  availabilityChangesPerUser: { limit: 60, windowMs: 60 * 60_000 },
+  appointmentCreatesPerUser: { limit: 20, windowMs: 60 * 60_000 },
+  appointmentActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  appointmentReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

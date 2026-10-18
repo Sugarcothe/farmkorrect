@@ -11,6 +11,7 @@ import {
 } from "@/lib/server/services";
 import { requireVerifiedRequest } from "@/lib/server/sessions";
 import { parseServiceUpdate } from "@/lib/server/validation";
+import { queueDirectoryRefresh } from "@/lib/server/vet-directory";
 
 // One of the signed-in user's services. Every lookup is by id *and* the
 // session's account, so another user's id (or a made-up one) is a 404 —
@@ -40,6 +41,7 @@ export const PATCH = route<Context>("services", async (request, { params }) => {
   // removed (or archived) between the read and the write
   const saved = await updateOwnService(user._id, current._id, update);
   if (!saved) throw notFound();
+  await queueDirectoryRefresh(user);
   return ok<ServiceResponse>({ service: toService(saved) });
 });
 
@@ -50,5 +52,6 @@ export const DELETE = route<Context>("services", async (request, { params }) => 
   if (limit.limited) throw tooManyRequests(limit.retryAfterSeconds);
 
   if (!(await archiveOwnService(user._id, (await params).id))) throw notFound();
+  await queueDirectoryRefresh(user);
   return ok(null);
 });

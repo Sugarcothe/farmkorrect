@@ -22,7 +22,9 @@ import {
 import { getResendConfig, getTermiiConfig, getWebPushConfig } from "./config";
 import { getDb, getMongoClient } from "./db";
 import { HttpError } from "./http";
+import { formatSlot } from "@/lib/vets/schedule";
 import {
+  type AppointmentDoc,
   COLLECTIONS,
   type NotificationDeliveryDoc,
   type NotificationDoc,
@@ -326,6 +328,65 @@ export function bankAccountEventSpecs(account: PayoutAccountDoc): NotificationSp
   ];
 }
 
+/**
+ * The inbox entries an appointment history item produces: the other party
+ * hears about each change. Only the service name, the time and the
+ * reference: never the farm address or a phone number.
+ */
+export function appointmentEventSpecs(appointment: AppointmentDoc, index: number): NotificationSpec[] {
+  const item = appointment.history[index];
+  if (!item) return [];
+  const id = appointment._id.toHexString();
+  const when = formatSlot(appointment.startsAt.toISOString());
+  const what = clip(appointment.service.name, 60);
+  const url = `/appointments/${id}`;
+  const spec = (recipientUserId: ObjectId, type: NotificationType, title: string, body: string): NotificationSpec => ({
+    recipientUserId,
+    type,
+    title,
+    body,
+    url,
+    eventKey: `appointment:${id}:${index}:${item.status}`,
+    subject: { kind: "appointment", id },
+    eventAt: item.at,
+  });
+  const customer = (type: NotificationType, title: string, body: string) =>
+    spec(appointment.customerUserId, type, title, body);
+  const vet = (type: NotificationType, title: string, body: string) => spec(appointment.vetUserId, type, title, body);
+  switch (item.status) {
+    case "requested":
+      return [vet("appointment_requested", "New appointment request", `${what}, ${when}. Accept or decline it in Jobs.`)];
+    case "confirmed":
+      return [
+        customer(
+          "appointment_confirmed",
+          appointment.paymentStatus === "not_required" ? "Appointment confirmed" : "Vet accepted your request",
+          appointment.paymentStatus === "not_required"
+            ? `${what}, ${when}.`
+            : `${what}, ${when}. Payment isn't collected in the app.`,
+        ),
+      ];
+    case "declined":
+      return [customer("appointment_declined", "Appointment request declined", `${what}, ${when}. The time is free again.`)];
+    case "cancelled":
+      return item.by === "customer"
+        ? [vet("appointment_cancelled", "Appointment cancelled", `The customer cancelled ${what}, ${when}.`)]
+        : [customer("appointment_cancelled", "Appointment cancelled", `The vet cancelled ${what}, ${when}.`)];
+    case "expired":
+      return [
+        customer("appointment_expired", "Request not answered", `The vet didn't respond in time to ${what}, ${when}.`),
+        vet("appointment_expired", "Request lapsed", `You didn't respond in time to ${what}, ${when}.`),
+      ];
+    case "en_route":
+      return [customer("appointment_en_route", "Vet on the way", `Your vet marked themselves on the way for ${what}.`)];
+    case "completed":
+      return [customer("appointment_completed", "Appointment completed", `${what} was marked completed by the vet.`)];
+    default:
+      // in_progress: nothing to tell anyone
+      return [];
+  }
+}
+
 export function passwordChangedSpec(userId: ObjectId, resetId: ObjectId, at: Date): NotificationSpec {
   return {
     recipientUserId: userId,
@@ -591,12 +652,26 @@ export async function syncPayoutNotifications(payoutId: ObjectId, now = new Date
   await markSynced(payouts, payoutId, length);
 }
 
+export async function syncAppointmentNotifications(appointmentId: ObjectId, now = new Date()): Promise<void> {
+  const db = await getDb();
+  const appointments = db.collection<AppointmentDoc>(COLLECTIONS.appointments);
+  const appointment = await appointments.findOne({ _id: appointmentId });
+  if (!appointment || !appointment.notifySyncAt) return;
+  const length = appointment.history.length;
+  const specs: NotificationSpec[] = [];
+  for (let i = appointment.notifiedThrough ?? 0; i < length; i++) {
+    if (!tooOld(appointment.history[i].at, now)) specs.push(...appointmentEventSpecs(appointment, i));
+  }
+  await createNotifications(specs, now);
+  await markSynced(appointments, appointmentId, length);
+}
+
 /**
  * Clears the flag only if no history item was added meanwhile (a later
  * change keeps it set for the next sync); either way records how far the
  * history has been turned into notifications.
  */
-async function markSynced<T extends OrderDoc | PayoutDoc>(collection: Collection<T>, id: ObjectId, length: number) {
+async function markSynced<T extends OrderDoc | PayoutDoc | AppointmentDoc>(collection: Collection<T>, id: ObjectId, length: number) {
   const cleared = await collection.updateOne(
     { _id: id, [`history.${length}`]: { $exists: false } } as Filter<T>,
     { $set: { notifySyncAt: null }, $max: { notifiedThrough: length } } as UpdateFilter<T>,
@@ -701,6 +776,7 @@ export async function sweepNotificationSync(limit: number, now = new Date()) {
   await run(await ids(COLLECTIONS.reviews), syncReviewNotification);
   await run(await ids(COLLECTIONS.payoutAccounts), syncBankAccountNotification);
   await run(await ids(COLLECTIONS.users), syncCredentialNotification);
+  await run(await ids(COLLECTIONS.appointments), syncAppointmentNotifications);
   return { synced, failed };
 }
 

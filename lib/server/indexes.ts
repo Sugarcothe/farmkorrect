@@ -254,6 +254,37 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // analytics: a seller's redeemed uses in a period and uses held now
     { key: { sellerUserId: 1, status: 1, redeemedAt: 1 }, name: "seller_status" },
   ],
+  [COLLECTIONS.vetAvailability]: [
+    // the appointment job rebuilds the least recently refreshed directory entries
+    { key: { directoryRefreshedAt: 1 }, name: "directory_refresh" },
+  ],
+  [COLLECTIONS.vetDirectory]: [
+    // directory pages: every query has listed: true, then keyset order on (key, _id)
+    { key: { listed: 1, experienceKey: -1, _id: 1 }, name: "listed_experience" },
+    { key: { listed: 1, nameKey: 1, _id: 1 }, name: "listed_name" },
+    { key: { listed: 1, state: 1, experienceKey: -1, _id: 1 }, name: "listed_state_experience" },
+    { key: { listed: 1, state: 1, nameKey: 1, _id: 1 }, name: "listed_state_name" },
+    // word-prefix search
+    { key: { searchWords: 1 }, name: "search_words" },
+  ],
+  [COLLECTIONS.appointments]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    // a retried booking returns the first one
+    { key: { customerUserId: 1, idempotencyKey: 1 }, name: "customer_idempotency", unique: true },
+    // each party's list, newest start first
+    { key: { customerUserId: 1, startsAt: -1, _id: -1 }, name: "customer_recent" },
+    { key: { vetUserId: 1, startsAt: -1, _id: -1 }, name: "vet_recent" },
+    // a customer's open requests (the cap on open bookings)
+    { key: { customerUserId: 1, bookingStatus: 1 }, name: "customer_status" },
+    // unanswered requests that lapse
+    { key: { bookingStatus: 1, respondBy: 1 }, name: "status_respond_by" },
+    { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
+  ],
+  [COLLECTIONS.appointmentSlots]: [
+    // no two appointments can hold the same unit of a vet's time
+    { key: { vetUserId: 1, startsAt: 1 }, name: "vet_unit_unique", unique: true },
+    { key: { appointmentId: 1 }, name: "appointment" },
+  ],
 };
 
 export async function ensureIndexes(db: Db): Promise<string[]> {

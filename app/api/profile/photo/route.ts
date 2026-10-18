@@ -13,6 +13,7 @@ import {
 import { deleteProfilePhoto, saveProfilePhoto } from "@/lib/server/profile";
 import { hit } from "@/lib/server/rate-limit";
 import { requireVerifiedRequest } from "@/lib/server/sessions";
+import { queueDirectoryRefresh } from "@/lib/server/vet-directory";
 
 // The signed-in user's profile photo. Uploads are the raw image bytes (not a
 // form), capped in size, checked by their actual content and re-encoded on
@@ -40,12 +41,15 @@ export const POST = route("profile-photo", async (request) => {
     `That photo is too large. Choose one under ${MAX_MB} MB.`,
   );
   const avatar = await processAvatar(bytes, declared);
-  return ok<ProfilePhotoResponse>({ photoUrl: await saveProfilePhoto(user._id, avatar.data) });
+  const photoUrl = await saveProfilePhoto(user._id, avatar.data);
+  await queueDirectoryRefresh(user);
+  return ok<ProfilePhotoResponse>({ photoUrl });
 });
 
 export const DELETE = route("profile-photo", async (request) => {
   assertSameOrigin(request);
   const { user } = await requireVerifiedRequest(request, UNVERIFIED);
   await deleteProfilePhoto(user._id);
+  await queueDirectoryRefresh(user);
   return ok(null);
 });
