@@ -1,57 +1,46 @@
-import Link from "next/link";
-import { ComingSoon } from "@/components/home/coming-soon";
-import { SignOutButton } from "@/components/home/sign-out-button";
+import { Dashboard } from "@/components/home/dashboard";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { buttonClasses } from "@/components/ui/button";
-import { AppointmentRow } from "@/components/vets/vet-parts";
-import { listAppointments } from "@/lib/server/appointments";
+import { dashboardActions, greetingFor, type DashboardStatsResult } from "@/lib/home/dashboard";
+import { PROFILE_CONFIG } from "@/lib/profile/config";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
+import { dashboardAccess, dashboardStats, dashboardSubtitle } from "@/lib/server/dashboard";
+import type { UserDoc } from "@/lib/server/models";
 
+const failed = (what: string, error: unknown) =>
+  console.error(`[home] ${what} failed: ${error instanceof Error ? error.name : typeof error}`);
+
+async function subtitleFor(user: UserDoc) {
+  try {
+    return await dashboardSubtitle(user);
+  } catch (error) {
+    failed("subtitle", error);
+    return PROFILE_CONFIG[user.role].title;
+  }
+}
+
+// The signed-in home dashboard: everything is read for the session's own
+// user. If the figures can't be read the page says so; Quick Actions still
+// work.
 export default async function Home() {
   const { user } = await requireVerifiedPageSession();
-  const firstName = user.fullName.trim().split(/\s+/)[0];
-  const recent = (await listAppointments(user, "customer", null)).appointments.slice(0, 2);
+  const now = new Date();
+  const access = await dashboardAccess(user);
+  const [subtitle, stats] = await Promise.all([
+    subtitleFor(user),
+    dashboardStats(user, access, now).catch((error: unknown): DashboardStatsResult => {
+      failed("stats", error);
+      return "unavailable";
+    }),
+  ]);
 
   return (
-    <main className="relative flex flex-1 flex-col items-center justify-center gap-8 px-8 py-10 text-center">
-      <div className="absolute top-2 right-3">
-        <NotificationBell />
-      </div>
-      <ComingSoon firstName={firstName} />
-      <nav aria-label="Vet appointments" className="flex w-full max-w-xs flex-col gap-3">
-        <Link href="/vets" className={buttonClasses("solid")}>
-          Find a vet
-        </Link>
-        <Link href="/appointments" className={buttonClasses("outline")}>
-          My appointments
-        </Link>
-        {user.role === "veterinarian" && (
-          <Link href="/jobs" className={buttonClasses("outline")}>
-            Jobs booked with me
-          </Link>
-        )}
-      </nav>
-      <nav aria-label="Other services" className="flex w-full max-w-xs flex-col gap-3">
-        <Link href="/services" className={buttonClasses("outline")}>
-          Other services
-        </Link>
-        <Link href="/services/bookings" className={buttonClasses("outline")}>
-          My service bookings
-        </Link>
-      </nav>
-      {recent.length > 0 && (
-        <section aria-labelledby="recent-bookings" className="w-full max-w-xs text-left">
-          <h2 id="recent-bookings" className="mb-2 text-sm font-semibold">
-            Recent bookings
-          </h2>
-          <ul className="overflow-hidden rounded-2xl bg-white ring-1 ring-foreground/8">
-            {recent.map((a) => (
-              <AppointmentRow key={a.id} appointment={a} href={`/appointments/${a.id}`} />
-            ))}
-          </ul>
-        </section>
-      )}
-      <SignOutButton />
-    </main>
+    <Dashboard
+      greeting={greetingFor(now)}
+      name={user.fullName.trim()}
+      subtitle={subtitle}
+      stats={stats}
+      actions={dashboardActions(access)}
+      bell={<NotificationBell onPrimary />}
+    />
   );
 }

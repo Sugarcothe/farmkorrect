@@ -66,6 +66,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // My bookings and the provider's jobs, newest first
     { key: { customerUserId: 1, createdAt: -1, _id: -1 }, name: "customer_recent" },
     { key: { providerUserId: 1, createdAt: -1, _id: -1 }, name: "provider_recent" },
+    // the provider's dashboard counts
+    { key: { providerUserId: 1, status: 1, "schedule.date": 1 }, name: "provider_status_date" },
     // the job: lapsing requests, quotes and unpaid bookings
     { key: { status: 1, respondBy: 1 }, name: "respond_queue" },
     { key: { status: 1, payBy: 1 }, name: "pay_queue" },
@@ -316,6 +318,8 @@ const INDEXES: Record<string, IndexDescription[]> = {
     // each party's list, newest start first
     { key: { customerUserId: 1, startsAt: -1, _id: -1 }, name: "customer_recent" },
     { key: { vetUserId: 1, startsAt: -1, _id: -1 }, name: "vet_recent" },
+    // the vet's dashboard counts (jobs today, this week, completed, awaiting a reply)
+    { key: { vetUserId: 1, bookingStatus: 1, startsAt: 1 }, name: "vet_status_starts" },
     // a customer's open requests (the cap on open bookings)
     { key: { customerUserId: 1, bookingStatus: 1 }, name: "customer_status" },
     // unanswered requests that lapse
