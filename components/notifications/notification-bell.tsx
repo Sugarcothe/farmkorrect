@@ -8,18 +8,24 @@ import { setUnreadCount, useUnreadCount } from "@/lib/notifications/unread-store
 
 const badgeText = (count: number) => (count > 99 ? "99+" : String(count));
 
-/** The header bell: opens the inbox and shows how many are unread. */
-export function NotificationBell() {
+const onPrimaryClass =
+  "flex size-10 items-center justify-center rounded-full bg-white/10 text-primary-foreground outline-none hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white";
+
+/**
+ * The header bell: opens the inbox and shows how many are unread.
+ * `onPrimary` styles it for a green (primary) header.
+ */
+export function NotificationBell({ onPrimary = false }: { onPrimary?: boolean } = {}) {
   const count = useUnreadCount();
   const unread = count ?? 0;
   const label = unread > 0 ? `Notifications, ${unread} unread` : "Notifications";
   return (
-    <Link href="/notifications" aria-label={label} className={`relative ${backButtonClass}`}>
+    <Link href="/notifications" aria-label={label} className={`relative ${onPrimary ? onPrimaryClass : backButtonClass}`}>
       <Icon name="bell" />
       {unread > 0 && (
         <span
           aria-hidden="true"
-          className="absolute top-1 right-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-600 px-1 text-[0.625rem] leading-none font-semibold text-white ring-2 ring-surface"
+          className={`absolute top-1 right-0.5 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-red-600 px-1 text-[0.625rem] leading-none font-semibold text-white ring-2 ${onPrimary ? "ring-primary" : "ring-surface"}`}
         >
           {badgeText(unread)}
         </span>
