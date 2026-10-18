@@ -5,6 +5,7 @@ import type { MarketProduct } from "@/lib/orders/types";
 import { getDb } from "./db";
 import { COLLECTIONS, type ProductDoc } from "./models";
 import { sellerNames, toMarketProduct } from "./products";
+import { marketOffers } from "./promotions";
 
 // Searching the Market. Every query runs in MongoDB against indexed fields
 // (see indexes.ts); nothing is filtered or ranked in memory, and only one
@@ -128,9 +129,12 @@ export async function searchMarket(viewerId: ObjectId, query: MarketQuery): Prom
     products.countDocuments(filter, { limit: MARKET_LIMITS.countCap + 1 }),
   ]);
   const shown = docs.slice(0, size);
-  const names = await sellerNames([...new Map(shown.map((d) => [d.sellerUserId.toHexString(), d.sellerUserId])).values()]);
+  const [names, offers] = await Promise.all([
+    sellerNames([...new Map(shown.map((d) => [d.sellerUserId.toHexString(), d.sellerUserId])).values()]),
+    marketOffers(shown),
+  ]);
   return {
-    products: shown.map((d) => toMarketProduct(d, names, viewerId)),
+    products: shown.map((d) => toMarketProduct(d, names, viewerId, offers.get(d._id.toHexString()) ?? null)),
     page,
     hasMore: docs.length > size && page < MARKET_LIMITS.maxPage,
     total: Math.min(counted, MARKET_LIMITS.countCap),

@@ -10,6 +10,7 @@ import {
   type ProductFulfillment,
   type ProductImage,
 } from "@/lib/orders/types";
+import type { ProductOffer } from "@/lib/promotions/types";
 import {
   validateDeliveryAreas,
   validateDeliveryInstructions,
@@ -30,6 +31,7 @@ import { searchTermsFor } from "./catalog";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type ProductDoc, type ProductImageDoc, type UserDoc } from "./models";
+import { marketOffers } from "./promotions";
 
 // Product listings. Only poultry farmers sell. A seller's own listings are
 // always looked up by id *and* the session's account, so someone else's id
@@ -342,7 +344,12 @@ export async function sellerNames(ids: ObjectId[]): Promise<Map<string, string>>
   return new Map(users.map((u) => [u._id.toHexString(), u.fullName]));
 }
 
-export function toMarketProduct(doc: ProductDoc, names: Map<string, string>, viewerId: ObjectId): MarketProduct {
+export function toMarketProduct(
+  doc: ProductDoc,
+  names: Map<string, string>,
+  viewerId: ObjectId,
+  offer: ProductOffer | null = null,
+): MarketProduct {
   const count = doc.ratingCount ?? 0;
   return {
     id: doc._id.toHexString(),
@@ -359,6 +366,7 @@ export function toMarketProduct(doc: ProductDoc, names: Map<string, string>, vie
     images: toProductImages(doc.images),
     fulfillment: fulfillmentOf(doc),
     rating: count > 0 && typeof doc.ratingAverage === "number" ? { average: doc.ratingAverage, count } : null,
+    offer,
   };
 }
 
@@ -368,5 +376,6 @@ export async function findMarketProduct(viewerId: ObjectId, id: string): Promise
   if (!_id) return null;
   const doc = await (await products()).findOne({ _id, active: true, archivedAt: null });
   if (!doc) return null;
-  return toMarketProduct(doc, await sellerNames([doc.sellerUserId]), viewerId);
+  const [names, offers] = await Promise.all([sellerNames([doc.sellerUserId]), marketOffers([doc])]);
+  return toMarketProduct(doc, names, viewerId, offers.get(doc._id.toHexString()) ?? null);
 }

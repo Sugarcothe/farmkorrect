@@ -8,6 +8,7 @@ import type { OrderDoc, PaymentDoc, UserDoc } from "./models";
 import { syncOrderLedger } from "./order-ledger";
 import { refundLatePayment } from "./order-refunds";
 import { bestEffort, flagOrder, historyItem, inTransaction, isPayable, notifyOrder, orderCollections } from "./order-store";
+import { pricingConsistent, redeemForOrder } from "./promotions";
 import {
   initializeTransaction,
   PaystackError,
@@ -103,7 +104,10 @@ async function markPaid(payment: PaymentDoc, transaction: TransactionResult): Pr
       },
       { session },
     );
-    return updated.modifiedCount === 1;
+    if (updated.modifiedCount !== 1) return false;
+    // the promotion use held since the order was placed now counts as redeemed
+    await redeemForOrder(session, payment.orderId, now);
+    return true;
   });
   if (orderUpdated) {
     await bestEffort("ledger sync", () => syncOrderLedger(payment.orderId));
@@ -122,9 +126,12 @@ async function markPaid(payment: PaymentDoc, transaction: TransactionResult): Pr
 async function applyTransaction(payment: PaymentDoc, transaction: TransactionResult): Promise<PaymentCheck> {
   const outcome = transactionOutcome(transaction.status);
   if (outcome === "success") {
+    // the attempt's amount was copied from the order; check the order still agrees
+    const order = await (await orderCollections()).orders.findOne({ _id: payment.orderId });
     const matches =
       transaction.reference === payment.reference &&
       transaction.amountKobo === payment.amountKobo &&
+      (!order || order.totalKobo === payment.amountKobo) &&
       transaction.currency === CURRENCY &&
       transaction.orderId === payment.orderId.toHexString();
     if (!matches) {
@@ -262,6 +269,11 @@ export async function checkout(order: OrderDoc, buyer: UserDoc): Promise<Checkou
     throw new HttpError(409, "This order can no longer be paid. Place a new order instead.");
   }
   if (!paymentsEnabled()) throw new HttpError(503, PAYMENTS_OFF);
+  // the amount charged is the order's stored total: never one that doesn't add up
+  if (!pricingConsistent(order)) {
+    await flagOrder(order._id, "order amounts don't add up");
+    throw new HttpError(409, "We can't take payment for this order right now. Please contact support.");
+  }
   const { payments } = await orderCollections();
   const active = await payments.findOne({ orderId: order._id, active: true });
   if (active) {

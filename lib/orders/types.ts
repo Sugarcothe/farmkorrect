@@ -1,11 +1,13 @@
 // Shapes the Market, Orders and Sales API sends and accepts. Amounts are
 // integer kobo in NGN. Prices, totals, sellers, stock and every status are
 // decided on the server: the browser only ever sends product ids,
-// quantities, a fulfilment choice, a delivery note and an idempotency key.
+// quantities, a fulfilment choice, a delivery note, an optional coupon code
+// and an idempotency key.
 // Farm Korret never adds a delivery fee: any delivery charge is agreed
 // between buyer and seller, outside the app.
 
 import type { NigerianState } from "@/lib/locations/nigeria";
+import type { OrderPromotion, ProductOffer } from "@/lib/promotions/types";
 import type { Currency } from "@/lib/wallet/types";
 
 export const PRODUCT_CATEGORIES = [
@@ -134,6 +136,8 @@ export type MarketProduct = {
   /** the first is the main photo (Market results carry only that one) */
   images: ProductImage[];
   fulfillment: ProductFulfillment;
+  /** the seller's live automatic sale on it, if any; the order is priced again at checkout */
+  offer: ProductOffer | null;
 };
 
 /**
@@ -151,6 +155,8 @@ export type OrderItem = {
   unitPriceKobo: number;
   quantity: number;
   lineTotalKobo: number;
+  /** this line's share of the order's discount (0 when none) */
+  discountKobo: number;
 };
 
 export type OrderEventName =
@@ -198,7 +204,11 @@ export type Order = {
   buyerName: string;
   items: OrderItem[];
   subtotalKobo: number;
-  /** what the buyer pays: the subtotal (no delivery fee or tax is added) */
+  /** the seller's promotion, taken off the subtotal (0 when none) */
+  discountKobo: number;
+  /** the promotion as it was when the order was placed; null when none */
+  promotion: OrderPromotion | null;
+  /** what the buyer pays: the subtotal less any discount (no delivery fee or tax is added) */
   totalKobo: number;
   currency: Currency;
   deliveryNote: string;
@@ -239,6 +249,8 @@ export type OrderRequest = {
   idempotencyKey: string;
   /** the total the buyer saw; the order is refused if prices changed since */
   expectedTotalKobo?: number;
+  /** a seller's coupon code; replaces any automatic sale (one offer per order) */
+  couponCode?: string;
 };
 
 export type OrderResponse = { order: Order };

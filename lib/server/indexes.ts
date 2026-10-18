@@ -211,6 +211,24 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { "target.type": 1, "target.id": 1, at: -1, _id: -1 }, name: "target_recent" },
     { key: { actorUserId: 1, at: -1, _id: -1 }, name: "actor_recent" },
   ],
+  [COLLECTIONS.promotions]: [
+    // a coupon code belongs to one promotion, whatever its status
+    { key: { code: 1 }, name: "code_unique", unique: true, partialFilterExpression: { code: { $type: "string" } } },
+    // the seller's list, newest first
+    { key: { sellerUserId: 1, createdAt: -1 }, name: "seller_recent" },
+    // live automatic sales for a seller's products (checkout and the Market)
+    { key: { sellerUserId: 1, status: 1, code: 1, endsAt: 1 }, name: "seller_live" },
+    { key: { status: 1, endsAt: 1 }, name: "status_expiry" },
+  ],
+  [COLLECTIONS.promotionRedemptions]: [
+    // an order uses at most one promotion, once
+    { key: { orderId: 1 }, name: "order_unique", unique: true },
+    // the per-buyer limit
+    { key: { promotionId: 1, buyerUserId: 1, status: 1 }, name: "promotion_buyer" },
+    // a promotion's results
+    { key: { promotionId: 1, status: 1 }, name: "promotion_status" },
+    { key: { sellerUserId: 1, reservedAt: -1 }, name: "seller_recent" },
+  ],
 };
 
 export async function ensureIndexes(db: Db): Promise<string[]> {

@@ -33,6 +33,10 @@ export const LIMITS = {
   orderCreatesPerUser: { limit: 30, windowMs: 60 * 60_000 },
   orderActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
   orderReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  // price checks at checkout, including coupon codes (also slows code guessing)
+  orderQuotesPerUser: { limit: 120, windowMs: 15 * 60_000 },
+  promotionChangesPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  promotionReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   paymentChecksPerUser: { limit: 60, windowMs: 15 * 60_000 },
   reviewWritesPerUser: { limit: 30, windowMs: 60 * 60_000 },
   reviewReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },

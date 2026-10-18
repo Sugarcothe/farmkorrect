@@ -15,6 +15,8 @@ import {
   type PaymentDoc,
   type PayoutDoc,
   type ProductDoc,
+  type PromotionDoc,
+  type PromotionRedemptionDoc,
   type ProviderEventDoc,
   type PushSubscriptionDoc,
   type PasswordResetDoc,
@@ -53,6 +55,8 @@ export async function collections() {
     notificationPreferences: db.collection<NotificationPreferencesDoc>(COLLECTIONS.notificationPreferences),
     pushSubscriptions: db.collection<PushSubscriptionDoc>(COLLECTIONS.pushSubscriptions),
     adminAudit: db.collection<AdminAuditDoc>(COLLECTIONS.adminAudit),
+    promotions: db.collection<PromotionDoc>(COLLECTIONS.promotions),
+    redemptions: db.collection<PromotionRedemptionDoc>(COLLECTIONS.promotionRedemptions),
   };
 }
 

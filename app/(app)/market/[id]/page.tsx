@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { OfferPrice, OfferTerms } from "@/components/market/offer-parts";
 import { productPlace } from "@/components/market/product-card";
 import { ProductGallery } from "@/components/market/product-gallery";
 import { BuyForm } from "@/components/orders/buy-form";
@@ -12,7 +13,6 @@ import { first } from "@/components/wallet/wallet-parts";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
 import { findMarketProduct } from "@/lib/server/products";
 import { findProductReviews } from "@/lib/server/reviews";
-import { formatKobo } from "@/lib/wallet/money";
 
 export const metadata: Metadata = { title: "Product" };
 
@@ -62,9 +62,10 @@ export default async function MarketProductPage({
             </p>
           )}
           <p className="mt-3 text-2xl font-bold tabular-nums text-primary">
-            {formatKobo(product.priceKobo)}{" "}
+            <OfferPrice priceKobo={product.priceKobo} offer={product.offer} />{" "}
             <span className="text-sm font-medium text-muted-foreground">{unitLabel(product.unit)}</span>
           </p>
+          {product.offer && <OfferTerms offer={product.offer} />}
           {product.description && (
             <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">{product.description}</p>
           )}
