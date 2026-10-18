@@ -46,11 +46,11 @@ async function collections() {
   };
 }
 
-const OPEN_ISSUE: Filter<OrderDoc> = { "issue.reportedAt": { $type: "date" }, "issue.closedAt": null };
+export const OPEN_ISSUE: Filter<OrderDoc> = { "issue.reportedAt": { $type: "date" }, "issue.closedAt": null };
 const CLOSED_ISSUE: Filter<OrderDoc> = { "issue.reportedAt": { $type: "date" }, "issue.closedAt": { $type: "date" } };
-const FLAGGED_ORDER: Filter<OrderDoc> = { reviewIssue: { $type: "string" } };
-const FLAGGED_PAYOUT: Filter<PayoutDoc> = { issue: { $type: "string" } };
-const FAILED_DELIVERY: Filter<NotificationDeliveryDoc> = { state: { $in: ["failed", "exhausted"] } };
+export const FLAGGED_ORDER: Filter<OrderDoc> = { reviewIssue: { $type: "string" } };
+export const FLAGGED_PAYOUT: Filter<PayoutDoc> = { issue: { $type: "string" } };
+export const FAILED_DELIVERY: Filter<NotificationDeliveryDoc> = { state: { $in: ["failed", "exhausted"] } };
 
 const clip = (text: string, max = 300) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 

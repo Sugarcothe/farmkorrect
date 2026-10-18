@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuditList } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
+import { buttonClasses } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icons";
 import { EmptyList } from "@/components/wallet/wallet-parts";
 import { requireAdminPage } from "@/lib/server/admin";
@@ -83,6 +84,11 @@ export default async function AdminPage() {
             </Link>
           ))}
         </section>
+
+        <Link href="/admin/analytics" className={buttonClasses("outline", "gap-2")}>
+          <Icon name="list" className="size-4" />
+          Marketplace analytics
+        </Link>
 
         <section aria-labelledby="recent-heading">
           <div className="mb-2 flex items-center justify-between">
