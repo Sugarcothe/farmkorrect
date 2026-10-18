@@ -5,6 +5,7 @@ import { requireOfferingRole, SERVICES_UNVERIFIED } from "@/lib/server/service-a
 import { createService, listServices, toService } from "@/lib/server/services";
 import { requireVerifiedRequest } from "@/lib/server/sessions";
 import { parseNewService } from "@/lib/server/validation";
+import { queueDirectoryRefresh } from "@/lib/server/vet-directory";
 
 // The signed-in user's own services. The owner always comes from the
 // session; there is no user id in the URL or body, and the role that decides
@@ -24,5 +25,6 @@ export const POST = route("services", async (request) => {
 
   const fields = parseNewService(user.role, await readJsonBody(request));
   const service = await createService(user._id, fields);
+  await queueDirectoryRefresh(user);
   return ok<ServiceResponse>({ service: toService(service) }, { status: 201 });
 });

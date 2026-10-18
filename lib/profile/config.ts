@@ -117,6 +117,15 @@ const PROFESSIONAL_TABS: readonly NavTab[] = [
   { label: "Profile", icon: "user", href: "/profile" },
 ];
 
+/** Veterinarians take appointments through Find a Vet: their Jobs and Availability are live. */
+const VET_TABS: readonly NavTab[] = [
+  { label: "Home", icon: "home", href: "/home" },
+  { label: "Jobs", icon: "briefcase", href: "/jobs" },
+  { label: "Availability", icon: "calendar", href: "/availability" },
+  { label: "Earnings", icon: "wallet", href: "/wallet" },
+  { label: "Profile", icon: "user", href: "/profile" },
+];
+
 const FARMER_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
   { label: "Market", icon: "store", href: "/market" },
@@ -163,7 +172,7 @@ export const PROFILE_CONFIG: Record<Role, RoleProfileConfig> = {
       "registrationNumber",
     ],
     sections: PROFESSIONAL_SECTIONS,
-    tabs: PROFESSIONAL_TABS,
+    tabs: VET_TABS,
     hasCredential: true,
   },
   "non-vet-specialist": {

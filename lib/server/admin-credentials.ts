@@ -15,6 +15,7 @@ import { HttpError } from "./http";
 import { COLLECTIONS, type UserDoc } from "./models";
 import { queueNotifications, syncCredentialNotification } from "./notifications";
 import { inTransaction } from "./order-store";
+import { queueDirectoryRefresh } from "./vet-directory";
 
 // Credential review: an admin approves or rejects the registration details a
 // veterinarian or specialist submitted in their profile. Approval means the
@@ -160,5 +161,7 @@ export async function decideCredential(
   if (!updated)
     throw new HttpError(409, "This submission changed or was already decided. Reload to see the latest details.");
   await queueNotifications("credential notification", () => syncCredentialNotification(userId));
+  // an approval can list a vet in Find a Vet; a rejection removes them
+  await queueDirectoryRefresh(updated);
   return toCase(updated);
 }

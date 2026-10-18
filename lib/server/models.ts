@@ -22,6 +22,7 @@ import type {
   NotificationType,
 } from "@/lib/notifications/types";
 import type { ReviewStatus } from "@/lib/reviews/types";
+import type { AppointmentActor, AppointmentPaymentStatus, BookingStatus, SlotMinutes, WeeklyHours } from "@/lib/vets/types";
 import type {
   Currency,
   EarningSourceType,
@@ -60,6 +61,10 @@ export const COLLECTIONS = {
   adminAudit: "admin_audit",
   promotions: "promotions",
   promotionRedemptions: "promotion_redemptions",
+  vetAvailability: "vet_availability",
+  vetDirectory: "vet_directory",
+  appointments: "appointments",
+  appointmentSlots: "appointment_slots",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -718,7 +723,7 @@ export type NotificationDoc = {
   /** e.g. order:<id>:<history index>:<event> */
   eventKey: string;
   /** what it's about, for support; ids only */
-  subject: { kind: "order" | "payout" | "review" | "bank_account" | "account"; id: string };
+  subject: { kind: "order" | "payout" | "review" | "bank_account" | "account" | "appointment"; id: string };
   /** when the business event happened */
   eventAt: Date;
   readAt: Date | null;
@@ -858,4 +863,116 @@ export type PromotionRedemptionDoc = {
   reservedAt: Date;
   redeemedAt: Date | null;
   releasedAt: Date | null;
+};
+
+// --- find a vet ------------------------------------------------------------------
+
+/**
+ * A veterinarian's booking settings (one per vet, `_id` = their user id).
+ * `listed` is the vet's own choice to appear in Find a Vet; they're only
+ * shown while their credential is also verified (see vet-directory.ts).
+ */
+export type VetAvailabilityDoc = {
+  _id: ObjectId;
+  listed: boolean;
+  state: NigerianState | null;
+  /** town or area they cover, free text */
+  area: string;
+  hours: WeeklyHours;
+  slotMinutes: SlotMinutes;
+  blockedDates: string[];
+  sharePhoneWithClients: boolean;
+  /** when the directory entry was last rebuilt from this and the other sources */
+  directoryRefreshedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * The searchable directory entry for one vet (`_id` = their user id). Derived
+ * entirely from users, services and vet_availability, and rebuilt whenever
+ * one of those changes (and by the appointment job), so it can always be
+ * recreated. Holds public details only. Pages and bookings re-check the
+ * sources; this is only used to find vets.
+ */
+export type VetDirectoryDoc = {
+  _id: ObjectId;
+  /** verified credential, active account, listing turned on, hours set, a bookable service */
+  listed: boolean;
+  name: string;
+  /** lower-case name, for the A–Z sort */
+  nameKey: string;
+  photoUrl: string | null;
+  specialization: string | null;
+  yearsOfExperience: number | null;
+  /** yearsOfExperience, or -1 when not given (sorts last) */
+  experienceKey: number;
+  state: NigerianState | null;
+  area: string;
+  serviceCategories: string[];
+  priceFromNgn: number | null;
+  /** minutes the shortest bookable service blocks (for the next open slot on cards) */
+  minBlockMinutes: number;
+  slotMinutes: SlotMinutes;
+  hours: WeeklyHours;
+  /** lower-case words from the name, specialization, service types and area */
+  searchWords: string[];
+  workDays: number[];
+  blockedDates: string[];
+  refreshedAt: Date;
+};
+
+export type AppointmentHistoryDoc = {
+  status: BookingStatus;
+  by: AppointmentActor;
+  userId: ObjectId | null;
+  at: Date;
+  /** the customer's or vet's own short reason, when they gave one */
+  note: string | null;
+};
+
+/**
+ * One booking of a vet's service. The service, price and farm location are
+ * copied in when it's made, so later edits never change it. Booking and
+ * payment have separate statuses; payment is never collected in the app yet
+ * (see docs/find-vet.md), so it is "not_required" or "payment_required".
+ */
+export type AppointmentDoc = {
+  _id: ObjectId;
+  /** short reference shown to both parties, e.g. VA-7K2M9QXC */
+  reference: string;
+  customerUserId: ObjectId;
+  vetUserId: ObjectId;
+  serviceId: ObjectId;
+  service: { name: string; category: string; durationMinutes: number | null };
+  startsAt: Date;
+  endsAt: Date;
+  location: { farmId: ObjectId | null; farmName: string; address: string; state: NigerianState; directions: string };
+  price: { priceKobo: number; feeKobo: number; totalKobo: number; currency: "NGN" };
+  bookingStatus: BookingStatus;
+  paymentStatus: AppointmentPaymentStatus;
+  respondBy: Date;
+  idempotencyKey: string;
+  history: AppointmentHistoryDoc[];
+  /** the slot holds were deleted (declined, cancelled or lapsed) */
+  slotsReleasedAt: Date | null;
+  /** see NotificationDoc: set with each change that notifies someone */
+  notifySyncAt: Date | null;
+  notifiedThrough: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * One 30-minute unit of a vet's time held by an appointment. Unique per vet
+ * and start time, so two bookings can never hold the same unit; inserted in
+ * the same transaction as the appointment and deleted when it's declined,
+ * cancelled or lapses.
+ */
+export type AppointmentSlotDoc = {
+  _id: ObjectId;
+  vetUserId: ObjectId;
+  startsAt: Date;
+  appointmentId: ObjectId;
+  createdAt: Date;
 };

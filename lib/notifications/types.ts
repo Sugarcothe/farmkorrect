@@ -25,6 +25,11 @@ export const NOTIFICATION_CATEGORIES = [
     description: "Changes to your bank details and password. These can't be turned off.",
   },
   {
+    value: "appointments",
+    label: "Vet appointments",
+    description: "Appointment requests, a vet accepting or declining, visits starting or finishing, and cancellations.",
+  },
+  {
     value: "reviews",
     label: "Reviews & marketplace",
     description: "New reviews on your listings, moderation of your reviews and checks of your credentials.",
@@ -98,6 +103,14 @@ export const NOTIFICATION_TYPES = {
   review_removed: { category: "reviews", icon: "alert-circle", channels: [] },
   credential_verified: { category: "reviews", icon: "check-circle", channels: [] },
   credential_rejected: { category: "reviews", icon: "alert-circle", channels: [] },
+  // vet appointments (customer and vet)
+  appointment_requested: { category: "appointments", icon: "list", channels: ["email", "sms", "push"] },
+  appointment_confirmed: { category: "appointments", icon: "check-circle", channels: ["email", "sms", "push"] },
+  appointment_declined: { category: "appointments", icon: "x", channels: ["email", "push"] },
+  appointment_cancelled: { category: "appointments", icon: "x", channels: ["email", "sms", "push"] },
+  appointment_expired: { category: "appointments", icon: "alert-circle", channels: ["email", "push"] },
+  appointment_en_route: { category: "appointments", icon: "list", channels: ["push"] },
+  appointment_completed: { category: "appointments", icon: "check-circle", channels: ["email", "push"] },
   // the account
   bank_account_added: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
   bank_account_changed: { category: "security", icon: "landmark", channels: ["email", "sms", "push"] },
@@ -160,6 +173,7 @@ export const DEFAULT_PREFERENCES: NotificationPreferences = {
   payments: { email: true, sms: true, push: true },
   payouts: { email: true, sms: true, push: true },
   security: { email: true, sms: true, push: true },
+  appointments: { email: true, sms: true, push: true },
   reviews: { email: false, sms: false, push: true },
 };
 
