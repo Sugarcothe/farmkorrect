@@ -129,7 +129,7 @@ const VET_TABS: readonly NavTab[] = [
 const FARMER_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
   { label: "Market", icon: "store", href: "/market" },
-  { label: "Training", icon: "graduation-cap", href: null },
+  { label: "Training", icon: "graduation-cap", href: "/training" },
   { label: "Finances", icon: "wallet", href: "/wallet" },
   { label: "Profile", icon: "user", href: "/profile" },
 ];

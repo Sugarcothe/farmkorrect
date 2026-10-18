@@ -14,6 +14,7 @@ const HIDDEN_ON = [
   /^\/wallet\/payout\/?$/,
   /^\/market\/listings\/(new|[^/]+\/edit)\/?$/,
   /^\/vets\/[^/]+\/book\/?$/,
+  /^\/admin\/training\/[^/]+\/?$/,
 ];
 
 export function BottomNav({ tabs }: { tabs: readonly NavTab[] }) {

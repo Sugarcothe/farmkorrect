@@ -285,6 +285,35 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { vetUserId: 1, startsAt: 1 }, name: "vet_unit_unique", unique: true },
     { key: { appointmentId: 1 }, name: "appointment" },
   ],
+  [COLLECTIONS.courses]: [
+    // the catalogue: every learner query has status "published", newest publication first
+    { key: { status: 1, publishedAt: -1, _id: -1 }, name: "status_published" },
+    { key: { status: 1, category: 1, publishedAt: -1, _id: -1 }, name: "status_category_published" },
+    { key: { status: 1, featured: 1, publishedAt: -1 }, name: "status_featured" },
+    // word-prefix search
+    { key: { searchWords: 1 }, name: "search_words" },
+    // the admin list
+    { key: { updatedAt: -1, _id: -1 }, name: "recently_updated" },
+  ],
+  [COLLECTIONS.courseEnrollments]: [
+    // one enrolment per learner and course
+    { key: { userId: 1, courseId: 1 }, name: "learner_course_unique", unique: true },
+    // Continue Learning
+    { key: { userId: 1, lastActivityAt: -1 }, name: "learner_recent" },
+  ],
+  [COLLECTIONS.lessonProgress]: [
+    // one record per learner, course and lesson; also serves every progress read
+    { key: { userId: 1, courseId: 1, lessonId: 1 }, name: "learner_lesson_unique", unique: true },
+  ],
+  [COLLECTIONS.farmStaff]: [
+    // one open invitation or membership per farm and phone number
+    { key: { farmId: 1, phoneNormalized: 1 }, name: "farm_phone_open", unique: true, partialFilterExpression: { open: true } },
+    { key: { farmId: 1, status: 1, invitedAt: -1 }, name: "farm_status" },
+    // invitations for a phone number, and a member's farms
+    { key: { phoneNormalized: 1, status: 1 }, name: "phone_status" },
+    { key: { userId: 1, status: 1 }, name: "member_status" },
+  ],
+  [COLLECTIONS.trainingPrograms]: [{ key: { farmId: 1, role: 1 }, name: "farm_role_unique", unique: true }],
 };
 
 export async function ensureIndexes(db: Db): Promise<string[]> {

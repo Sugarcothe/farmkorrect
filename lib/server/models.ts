@@ -22,6 +22,7 @@ import type {
   NotificationType,
 } from "@/lib/notifications/types";
 import type { ReviewStatus } from "@/lib/reviews/types";
+import type { CourseCategory, CourseStatus, Difficulty, StaffRole, StaffStatus } from "@/lib/training/types";
 import type { AppointmentActor, AppointmentPaymentStatus, BookingStatus, SlotMinutes, WeeklyHours } from "@/lib/vets/types";
 import type {
   Currency,
@@ -65,6 +66,11 @@ export const COLLECTIONS = {
   vetDirectory: "vet_directory",
   appointments: "appointments",
   appointmentSlots: "appointment_slots",
+  courses: "courses",
+  courseEnrollments: "course_enrollments",
+  lessonProgress: "lesson_progress",
+  farmStaff: "farm_staff",
+  trainingPrograms: "training_programs",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -975,4 +981,114 @@ export type AppointmentSlotDoc = {
   startsAt: Date;
   appointmentId: ObjectId;
   createdAt: Date;
+};
+
+// --- Korret Academy (docs/training-academy.md) -------------------------------------
+
+export type CourseResourceDoc = {
+  /** issued by the server, never changes */
+  id: string;
+  title: string;
+  /** a validated Cloudinary PDF delivery URL */
+  url: string;
+};
+
+export type CourseLessonDoc = {
+  /** issued by the server and kept through every edit, so progress records stay attached */
+  id: string;
+  title: string;
+  summary: string;
+  durationSeconds: number;
+  /** a validated Cloudinary video delivery URL; null while not added */
+  videoUrl: string | null;
+  resources: CourseResourceDoc[];
+};
+
+export type CourseModuleDoc = { id: string; title: string; lessons: CourseLessonDoc[] };
+
+/**
+ * A course, its curriculum embedded in order (bounded by TRAINING_LIMITS).
+ * Drafts are only ever read by the admin area.
+ */
+export type CourseDoc = {
+  _id: ObjectId;
+  status: CourseStatus;
+  title: string;
+  description: string;
+  instructor: string;
+  category: CourseCategory;
+  difficulty: Difficulty;
+  objectives: string[];
+  prerequisites: string[];
+  coverUrl: string | null;
+  /** shown under "Featured" on the Training home while published; set by an admin */
+  featured: boolean;
+  modules: CourseModuleDoc[];
+  /** derived from modules on every save */
+  lessonCount: number;
+  durationSeconds: number;
+  /** lower-case word prefixes of title, category and instructor */
+  searchWords: string[];
+  /** when it was last published; the catalogue's order. null while never published */
+  publishedAt: Date | null;
+  createdBy: ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** One per learner and course, created when they start it. */
+export type CourseEnrollmentDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  courseId: ObjectId;
+  enrolledAt: Date;
+  /** the lesson they last opened or saved a position in */
+  lastLessonId: string | null;
+  lastActivityAt: Date;
+  /** the first time every lesson of the curriculum then current was complete; kept as history */
+  completedAt: Date | null;
+};
+
+/** One per learner, course and lesson. Kept when a lesson is removed or a course unpublished. */
+export type LessonProgressDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  courseId: ObjectId;
+  lessonId: string;
+  positionSeconds: number;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * A person a farm owner has invited to train. Matched to an account only by
+ * the invitee accepting while signed in with the invited (verified) phone.
+ */
+export type FarmStaffDoc = {
+  _id: ObjectId;
+  farmId: ObjectId;
+  ownerUserId: ObjectId;
+  /** E.164 */
+  phoneNormalized: string;
+  role: StaffRole;
+  status: StaffStatus;
+  /** true while invited or active: at most one open record per farm and phone */
+  open?: true;
+  /** set when they accept */
+  userId: ObjectId | null;
+  invitedAt: Date;
+  respondedAt: Date | null;
+  removedAt: Date | null;
+  updatedAt: Date;
+};
+
+/** The published courses a farm assigns to everyone in one staff role. */
+export type TrainingProgramDoc = {
+  _id: ObjectId;
+  farmId: ObjectId;
+  role: StaffRole;
+  courseIds: ObjectId[];
+  updatedBy: ObjectId;
+  updatedAt: Date;
 };

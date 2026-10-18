@@ -65,7 +65,7 @@ export function parseAuditFilters(params: URLSearchParams): AuditFilters {
   const fieldErrors: Record<string, string> = {};
   if (action !== null && !isAdminAction(action)) fieldErrors.action = "Unknown action.";
   if (targetType !== null && !isAuditTargetType(targetType)) fieldErrors.targetType = "Unknown target type.";
-  if (targetId !== null && !TARGET_ID.test(targetId)) fieldErrors.targetId = "Enter a user, review id or order number.";
+  if (targetId !== null && !TARGET_ID.test(targetId)) fieldErrors.targetId = "Enter a user, review or course id, or an order number.";
   if (actor !== null && !/^[0-9a-f]{24}$/.test(actor)) fieldErrors.actor = "Enter an admin's user id.";
   if (Object.keys(fieldErrors).length) throw new HttpError(400, "Please correct the filters.", fieldErrors);
   return {
