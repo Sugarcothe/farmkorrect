@@ -22,13 +22,17 @@ import {
   validateRegistrationNumber,
   validateSpecialization,
 } from "@/lib/profile/validation";
-import type { ServiceFields } from "@/lib/services/types";
+import { serviceCategory } from "@/lib/services/config";
+import type { MarketplaceFields, ServiceFields } from "@/lib/services/types";
 import {
   validateDurationMinutes,
   validatePriceNgn,
+  validatePricing,
   validateServiceCategory,
   validateServiceDescription,
   validateServiceName,
+  validateServiceNote,
+  validateServiceStates,
 } from "@/lib/services/validation";
 import { HttpError, str } from "./http";
 import { MAX_PASSWORD_LENGTH } from "./passwords";
@@ -283,10 +287,16 @@ const SERVICE_FIELD_TYPES = {
   durationMinutes: "duration",
   active: "boolean",
   bookingAvailable: "boolean",
+  pricing: "text",
+  serviceStates: "list",
+  included: "text",
+  excluded: "text",
+  requirements: "text",
 } as const satisfies Record<keyof ServiceFields, string>;
 
 const SERVICE_TYPE_ERRORS = {
   text: "Enter text.",
+  list: "Choose from the list.",
   number: "Enter the price as a number.",
   duration: "Choose one of the listed durations.",
   boolean: "Choose on or off.",
@@ -322,7 +332,9 @@ function readServiceFields(body: Record<string, unknown>): Partial<ServiceFields
           ? typeof value === "number"
           : kind === "duration"
             ? value === null || typeof value === "number"
-            : typeof value === "boolean";
+            : kind === "list"
+              ? Array.isArray(value) && value.length <= 50 && value.every((v) => typeof v === "string")
+              : typeof value === "boolean";
     if (!valid) typeErrors[key] = SERVICE_TYPE_ERRORS[kind];
   }
   throwIfErrors(typeErrors);
@@ -330,30 +342,81 @@ function readServiceFields(body: Record<string, unknown>): Partial<ServiceFields
   const fields = { ...body } as Partial<ServiceFields>;
   if (fields.name !== undefined) fields.name = cleanText(fields.name);
   if (fields.description !== undefined) fields.description = cleanText(fields.description, true);
+  for (const key of ["included", "excluded", "requirements"] as const)
+    if (fields[key] !== undefined) fields[key] = cleanText(fields[key], true);
   return fields;
 }
+
+const MARKETPLACE_KEYS = ["pricing", "serviceStates", "included", "excluded", "requirements"] as const;
+
+/**
+ * The marketplace details of a service whose (new or current) category is
+ * `category`. Other Services categories need pricing and at least one state;
+ * every other category refuses them. `current` holds the stored values an
+ * update may leave unchanged.
+ */
+function marketplaceErrors(
+  role: Role,
+  category: string,
+  fields: Partial<ServiceFields>,
+  current: Partial<MarketplaceFields>,
+): Record<string, string | undefined> {
+  if (!serviceCategory(role, category)?.marketplace)
+    return Object.fromEntries(
+      MARKETPLACE_KEYS.filter((key) => fields[key] !== undefined).map((key) => [
+        key,
+        "This only applies to Other Services categories.",
+      ]),
+    );
+  return {
+    pricing: validatePricing(fields.pricing ?? current.pricing),
+    serviceStates: validateServiceStates(fields.serviceStates ?? current.serviceStates),
+    included: fields.included === undefined ? undefined : validateServiceNote(fields.included),
+    excluded: fields.excluded === undefined ? undefined : validateServiceNote(fields.excluded),
+    requirements: fields.requirements === undefined ? undefined : validateServiceNote(fields.requirements),
+  };
+}
+
+const QUOTE_HAS_NO_PRICE = "A quote-on-request service has no fixed price. Leave the price empty.";
 
 /** A new service. Text, category, price and duration are required. */
 export function parseNewService(role: Role, body: Record<string, unknown>): ServiceFields {
   const fields = readServiceFields(body);
   const category = fields.category ?? "";
+  const market = serviceCategory(role, category)?.marketplace === true;
+  const quote = market && fields.pricing === "quote";
   throwIfErrors({
     name: validateServiceName(fields.name ?? ""),
     category: validateServiceCategory(role, category),
     description: validateServiceDescription(fields.description ?? ""),
-    priceNgn:
-      fields.priceNgn === undefined ? "Enter a price in naira." : validatePriceNgn(role, fields.priceNgn, category),
+    priceNgn: quote
+      ? fields.priceNgn === undefined || fields.priceNgn === 0
+        ? undefined
+        : QUOTE_HAS_NO_PRICE
+      : fields.priceNgn === undefined
+        ? "Enter a price in naira."
+        : validatePriceNgn(role, fields.priceNgn, category),
     durationMinutes:
       fields.durationMinutes === undefined ? "Choose a duration." : validateDurationMinutes(fields.durationMinutes),
+    ...marketplaceErrors(role, category, fields, {}),
   });
   return {
     name: fields.name!,
     category,
     description: fields.description!,
-    priceNgn: fields.priceNgn!,
+    priceNgn: quote ? 0 : fields.priceNgn!,
     durationMinutes: fields.durationMinutes!,
     active: fields.active ?? true,
     bookingAvailable: fields.bookingAvailable ?? true,
+    ...(market
+      ? {
+          pricing: fields.pricing!,
+          serviceStates: fields.serviceStates!,
+          included: fields.included ?? "",
+          excluded: fields.excluded ?? "",
+          requirements: fields.requirements ?? "",
+        }
+      : {}),
   };
 }
 
@@ -365,21 +428,34 @@ export function parseNewService(role: Role, body: Record<string, unknown>): Serv
 export function parseServiceUpdate(
   role: Role,
   body: Record<string, unknown>,
-  current: Pick<ServiceFields, "category" | "priceNgn">,
+  current: Pick<ServiceFields, "category" | "priceNgn"> & Partial<MarketplaceFields>,
 ): Partial<ServiceFields> {
   const fields = readServiceFields(body);
   if (Object.keys(fields).length === 0) throw new HttpError(400, "There are no changes to save.");
 
-  const priceChecked = fields.priceNgn !== undefined || fields.category !== undefined;
+  const category = fields.category ?? current.category;
+  const market = serviceCategory(role, category)?.marketplace === true;
+  // stored marketplace details only carry over while the service stays in the marketplace
+  const stored: Partial<MarketplaceFields> = serviceCategory(role, current.category)?.marketplace ? current : {};
+  const quote = market && (fields.pricing ?? stored.pricing) === "quote";
+  const priceChecked = fields.priceNgn !== undefined || fields.category !== undefined || fields.pricing !== undefined;
   throwIfErrors({
     name: fields.name === undefined ? undefined : validateServiceName(fields.name),
     category: fields.category === undefined ? undefined : validateServiceCategory(role, fields.category),
     description: fields.description === undefined ? undefined : validateServiceDescription(fields.description),
-    priceNgn: priceChecked
-      ? validatePriceNgn(role, fields.priceNgn ?? current.priceNgn, fields.category ?? current.category)
-      : undefined,
+    priceNgn: quote
+      ? fields.priceNgn === undefined || fields.priceNgn === 0
+        ? undefined
+        : QUOTE_HAS_NO_PRICE
+      : priceChecked
+        ? validatePriceNgn(role, fields.priceNgn ?? current.priceNgn, category)
+        : undefined,
     durationMinutes:
       fields.durationMinutes === undefined ? undefined : validateDurationMinutes(fields.durationMinutes),
+    ...(market || MARKETPLACE_KEYS.some((key) => fields[key] !== undefined)
+      ? marketplaceErrors(role, category, fields, stored)
+      : {}),
   });
+  if (quote) fields.priceNgn = 0;
   return fields;
 }

@@ -31,6 +31,14 @@ export default async function Home() {
           </Link>
         )}
       </nav>
+      <nav aria-label="Other services" className="flex w-full max-w-xs flex-col gap-3">
+        <Link href="/services" className={buttonClasses("outline")}>
+          Other services
+        </Link>
+        <Link href="/services/bookings" className={buttonClasses("outline")}>
+          My service bookings
+        </Link>
+      </nav>
       {recent.length > 0 && (
         <section aria-labelledby="recent-bookings" className="w-full max-w-xs text-left">
           <h2 id="recent-bookings" className="mb-2 text-sm font-semibold">

@@ -93,7 +93,7 @@ export type MenuIcon =
 
 export type NavTab = {
   label: string;
-  icon: "home" | "briefcase" | "calendar" | "wallet" | "user" | "store" | "graduation-cap";
+  icon: "home" | "briefcase" | "calendar" | "wallet" | "user" | "store" | "graduation-cap" | "wrench";
   /** null while that area isn't built; the tab shows as "Soon" and is disabled */
   href: string | null;
 };
@@ -109,10 +109,11 @@ type RoleProfileConfig = {
   hasCredential: boolean;
 };
 
+/** Specialists take Other Services bookings: Jobs lists them, Services is the directory. */
 const PROFESSIONAL_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
-  { label: "Jobs", icon: "briefcase", href: null },
-  { label: "Availability", icon: "calendar", href: null },
+  { label: "Jobs", icon: "briefcase", href: "/services/jobs" },
+  { label: "Services", icon: "wrench", href: "/services" },
   { label: "Earnings", icon: "wallet", href: "/wallet" },
   { label: "Profile", icon: "user", href: "/profile" },
 ];
@@ -129,6 +130,7 @@ const VET_TABS: readonly NavTab[] = [
 const FARMER_TABS: readonly NavTab[] = [
   { label: "Home", icon: "home", href: "/home" },
   { label: "Market", icon: "store", href: "/market" },
+  { label: "Services", icon: "wrench", href: "/services" },
   { label: "Training", icon: "graduation-cap", href: "/training" },
   { label: "Finances", icon: "wallet", href: "/wallet" },
   { label: "Profile", icon: "user", href: "/profile" },

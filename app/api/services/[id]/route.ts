@@ -39,7 +39,7 @@ export const PATCH = route<Context>("services", async (request, { params }) => {
   if (!current) throw notFound();
   const update = parseServiceUpdate(user.role, await readJsonBody(request), current);
   // removed (or archived) between the read and the write
-  const saved = await updateOwnService(user._id, current._id, update);
+  const saved = await updateOwnService(user._id, current, update);
   if (!saved) throw notFound();
   await queueDirectoryRefresh(user);
   return ok<ServiceResponse>({ service: toService(saved) });

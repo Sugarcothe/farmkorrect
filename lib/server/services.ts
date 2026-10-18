@@ -1,7 +1,8 @@
 import "server-only";
-import { ObjectId } from "mongodb";
-import { isBookable, SERVICE_LIMITS } from "@/lib/services/config";
+import { ObjectId, type UpdateFilter } from "mongodb";
+import { isBookable, isMarketplaceCategory, marketplaceLabel, SERVICE_LIMITS } from "@/lib/services/config";
 import type { Service, ServiceFields } from "@/lib/services/types";
+import { searchWords } from "@/lib/vets/query";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import { COLLECTIONS, type ServiceDoc } from "./models";
@@ -26,6 +27,11 @@ export function toService(doc: ServiceDoc): Service {
     active: doc.active,
     bookingAvailable: doc.bookingAvailable,
     bookable: isBookable(doc),
+    pricing: doc.pricing ?? null,
+    serviceStates: doc.serviceStates ?? [],
+    included: doc.included ?? "",
+    excluded: doc.excluded ?? "",
+    requirements: doc.requirements ?? "",
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };
@@ -39,6 +45,13 @@ function parseServiceId(id: string): ObjectId | null {
 function ownedBy(ownerUserId: ObjectId, id: ObjectId) {
   return { _id: id, ownerUserId, archivedAt: null };
 }
+
+/** Directory search words for a marketplace service (none for any other). */
+export function serviceSearchWords(doc: Pick<ServiceDoc, "name" | "description" | "category">): string[] {
+  return [...new Set(searchWords(`${doc.name} ${marketplaceLabel(doc.category)} ${doc.description}`))].slice(0, 80);
+}
+
+const MARKETPLACE_FIELDS = ["pricing", "serviceStates", "included", "excluded", "requirements", "searchWords"] as const;
 
 export const SERVICE_NOT_FOUND = "We couldn't find that service. It may have been removed.";
 
@@ -72,6 +85,7 @@ export async function createService(ownerUserId: ObjectId, fields: ServiceFields
     _id: new ObjectId(),
     ownerUserId,
     ...fields,
+    ...(isMarketplaceCategory(fields.category) ? { searchWords: serviceSearchWords(fields) } : {}),
     archivedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -80,17 +94,26 @@ export async function createService(ownerUserId: ObjectId, fields: ServiceFields
   return doc;
 }
 
-/** Applies a validated update to the owner's service; null if it isn't theirs (or is gone). */
+/**
+ * Applies a validated update to the owner's service (`current` is the stored
+ * version it was validated against); null if it isn't theirs (or is gone).
+ * A service moved out of the marketplace loses its marketplace details.
+ */
 export async function updateOwnService(
   ownerUserId: ObjectId,
-  id: ObjectId,
+  current: ServiceDoc,
   update: Partial<ServiceFields>,
 ): Promise<ServiceDoc | null> {
-  return (await services()).findOneAndUpdate(
-    ownedBy(ownerUserId, id),
-    { $set: { ...update, updatedAt: new Date() } },
-    { returnDocument: "after" },
-  );
+  const next = { ...current, ...update };
+  const change: UpdateFilter<ServiceDoc> = isMarketplaceCategory(next.category)
+    ? { $set: { ...update, searchWords: serviceSearchWords(next), updatedAt: new Date() } }
+    : {
+        $set: { ...update, updatedAt: new Date() },
+        ...(isMarketplaceCategory(current.category)
+          ? { $unset: Object.fromEntries(MARKETPLACE_FIELDS.map((key) => [key, ""])) }
+          : {}),
+      };
+  return (await services()).findOneAndUpdate(ownedBy(ownerUserId, current._id), change, { returnDocument: "after" });
 }
 
 /** Archives the owner's service so it's no longer listed or bookable; false if it isn't theirs. */

@@ -9,6 +9,7 @@ import { SelectField, TextAreaField, TextField } from "@/components/ui/field";
 import { Icon } from "@/components/ui/icons";
 import { Switch } from "@/components/ui/switch";
 import type { Role } from "@/lib/auth/types";
+import { NIGERIAN_STATES, type NigerianState } from "@/lib/locations/nigeria";
 import { cleanText } from "@/lib/profile/validation";
 import { createService, updateService } from "@/lib/services/api";
 import {
@@ -17,7 +18,9 @@ import {
   formatNaira,
   SERVICE_CATEGORIES,
   SERVICE_LIMITS,
+  SERVICE_PRICING,
   serviceCategory,
+  type ServicePricing,
 } from "@/lib/services/config";
 import type { Service, ServiceFields, ServiceUpdateRequest } from "@/lib/services/types";
 import {
@@ -27,6 +30,8 @@ import {
   validateServiceCategory,
   validateServiceDescription,
   validateServiceName,
+  validateServiceNote,
+  validateServiceStates,
 } from "@/lib/services/validation";
 import { useForm } from "@/lib/use-form";
 
@@ -37,6 +42,13 @@ type Values = {
   price: string;
   duration: string;
   bookingAvailable: boolean;
+  /** Other Services categories only */
+  pricing: string;
+  /** comma-separated state values (the form holds text only) */
+  serviceStates: string;
+  included: string;
+  excluded: string;
+  requirements: string;
 };
 
 const VARIES = "varies";
@@ -56,32 +68,64 @@ const FORM_FIELD: Record<string, keyof Values> = {
   priceNgn: "price",
   durationMinutes: "duration",
   bookingAvailable: "bookingAvailable",
+  pricing: "pricing",
+  serviceStates: "serviceStates",
+  included: "included",
+  excluded: "excluded",
+  requirements: "requirements",
 };
+
+const MARKET_EMPTY = { pricing: "", serviceStates: "", included: "", excluded: "", requirements: "" };
+const statesOf = (value: string) => (value ? (value.split(",") as NigerianState[]) : []);
 
 function initialValues(service?: Service): Values {
   if (!service)
-    return { name: "", category: "", description: "", price: "", duration: "", bookingAvailable: true };
+    return { name: "", category: "", description: "", price: "", duration: "", bookingAvailable: true, ...MARKET_EMPTY };
   return {
     name: service.name,
     category: service.category,
     description: service.description,
-    price: String(service.priceNgn),
+    price: service.pricing === "quote" ? "" : String(service.priceNgn),
     duration: service.durationMinutes === null ? VARIES : String(service.durationMinutes),
     bookingAvailable: service.bookingAvailable,
+    pricing: service.pricing ?? "",
+    serviceStates: service.serviceStates.join(","),
+    included: service.included,
+    excluded: service.excluded,
+    requirements: service.requirements,
   };
 }
 
-/** What the server would store for these values (only meaningful once they're valid). */
-function toFields(v: Values): Omit<ServiceFields, "active"> {
-  return {
+const isMarket = (role: Role, category: string) => serviceCategory(role, category)?.marketplace === true;
+const isQuote = (role: Role, v: Values) => isMarket(role, v.category) && v.pricing === "quote";
+
+/**
+ * What the server would store for these values (only meaningful once they're
+ * valid). Marketplace details are only sent for Other Services categories.
+ */
+function toFields(role: Role, v: Values): Omit<ServiceFields, "active"> {
+  const base = {
     name: cleanText(v.name),
     category: v.category,
     description: cleanText(v.description, true),
-    priceNgn: parsePriceInput(v.price),
+    priceNgn: isQuote(role, v) ? 0 : parsePriceInput(v.price),
     durationMinutes: v.duration === VARIES || v.duration === "" ? null : Number(v.duration),
     bookingAvailable: v.bookingAvailable,
   };
+  if (!isMarket(role, v.category)) return base;
+  return {
+    ...base,
+    pricing: v.pricing as ServicePricing,
+    serviceStates: statesOf(v.serviceStates),
+    included: cleanText(v.included, true),
+    excluded: cleanText(v.excluded, true),
+    requirements: cleanText(v.requirements, true),
+  };
 }
+
+/** Field values compared as text, so a reordered or unchanged list isn't a change. */
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(Array.isArray(a) ? [...a].sort() : a) === JSON.stringify(Array.isArray(b) ? [...b].sort() : b);
 
 /**
  * Adds a service, or edits one when `service` is given. The categories come
@@ -99,27 +143,39 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
 
   const form = useForm<Values>(initial, (v) => {
     const price = parsePriceInput(v.price);
+    const market = isMarket(role, v.category);
     return {
       name: validateServiceName(v.name),
       category: validateServiceCategory(role, v.category),
       description: validateServiceDescription(v.description),
-      price: !v.price.trim()
-        ? "Enter a price in naira."
-        : Number.isNaN(price)
-          ? "Enter the price as a number, like 5000."
-          : validatePriceNgn(role, price, v.category),
-      duration: v.duration ? validateDurationMinutes(toFields(v).durationMinutes) : "Choose a duration.",
+      price: isQuote(role, v)
+        ? undefined
+        : !v.price.trim()
+          ? "Enter a price in naira."
+          : Number.isNaN(price)
+            ? "Enter the price as a number, like 5000."
+            : validatePriceNgn(role, price, v.category),
+      duration: v.duration ? validateDurationMinutes(toFields(role, v).durationMinutes) : "Choose a duration.",
+      ...(market
+        ? {
+            pricing: v.pricing ? undefined : "Choose a fixed price or quote on request.",
+            serviceStates: validateServiceStates(statesOf(v.serviceStates)),
+            included: validateServiceNote(v.included),
+            excluded: validateServiceNote(v.excluded),
+            requirements: validateServiceNote(v.requirements),
+          }
+        : {}),
     };
   });
 
   /** Only the fields that actually changed (all of them for a new service). */
   function changes(values: Values): ServiceUpdateRequest {
-    const next = toFields(values);
+    const next = toFields(role, values);
     if (!editing) return next;
-    const before = toFields(initial);
+    const before = toFields(role, initial);
     return Object.fromEntries(
       (Object.keys(next) as Array<keyof typeof next>)
-        .filter((key) => next[key] !== before[key])
+        .filter((key) => !same(next[key], before[key]))
         .map((key) => [key, next[key]]),
     );
   }
@@ -153,7 +209,7 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
 
     const res = editing
       ? await updateService(service.id, changes(values))
-      : await createService(toFields(values) as ServiceFields);
+      : await createService(toFields(role, values) as ServiceFields);
 
     if (!res.ok) {
       // keep everything that was typed so it can be fixed and resent
@@ -176,6 +232,9 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
   });
 
   const category = serviceCategory(role, form.values.category);
+  const market = category?.marketplace === true;
+  const quote = market && form.values.pricing === "quote";
+  const states = statesOf(form.values.serviceStates);
   const price = parsePriceInput(form.values.price);
   const priceHint =
     Number.isInteger(price) && price >= 0 && !form.errors.price
@@ -211,8 +270,50 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
             hint={`${cleanText(form.values.description, true).length}/${SERVICE_LIMITS.description.max} characters`}
             {...form.field("description")}
           />
-          <TextField label="Price (₦)" inputMode="numeric" placeholder="e.g. 5,000" hint={priceHint} {...form.field("price")} />
+          {market && (
+            <SelectField
+              label="Pricing"
+              placeholder="How is this priced?"
+              options={SERVICE_PRICING}
+              hint={
+                quote
+                  ? "Customers describe the job and you send a quote. They pay once they accept it."
+                  : "Customers pay this price through the app when they book."
+              }
+              {...form.field("pricing")}
+            />
+          )}
+          {!quote && (
+            <TextField label="Price (₦)" inputMode="numeric" placeholder="e.g. 5,000" hint={priceHint} {...form.field("price")} />
+          )}
           <SelectField label="Duration" placeholder="Select how long it takes" options={durationOptions} {...form.field("duration")} />
+
+          {market && (
+            <>
+              <StatePicker
+                selected={states}
+                error={form.errors.serviceStates}
+                disabled={submitting}
+                onChange={(next) => form.setValue("serviceStates", next.join(","))}
+              />
+              <TextAreaField
+                label="What's included (optional)"
+                maxLength={SERVICE_LIMITS.note + 50}
+                {...form.field("included")}
+              />
+              <TextAreaField
+                label="What's not included (optional)"
+                maxLength={SERVICE_LIMITS.note + 50}
+                {...form.field("excluded")}
+              />
+              <TextAreaField
+                label="What the customer must provide (optional)"
+                placeholder="e.g. Empty the house of birds before the visit."
+                maxLength={SERVICE_LIMITS.note + 50}
+                {...form.field("requirements")}
+              />
+            </>
+          )}
 
           <div className="rounded-2xl bg-white px-4 py-3.5 ring-1 ring-foreground/8">
             <Switch
@@ -220,7 +321,9 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
               description={
                 editing && !service.active
                   ? "This service is inactive, so it can't be booked until you activate it."
-                  : "Bookings aren't open yet. When they launch, farmers can book this service."
+                  : market
+                    ? "When on, customers can find and book this in Services."
+                    : "Bookings aren't open yet. When they launch, farmers can book this service."
               }
               checked={form.values.bookingAvailable}
               onChange={(checked) => form.setValue("bookingAvailable", checked)}
@@ -245,5 +348,45 @@ export function ServiceForm({ role, service }: { role: Role; service?: Service }
         </div>
       </form>
     </main>
+  );
+}
+
+/** The states a marketplace service covers, as toggle chips. */
+function StatePicker({
+  selected,
+  error,
+  disabled,
+  onChange,
+}: {
+  selected: NigerianState[];
+  error?: string;
+  disabled: boolean;
+  onChange: (next: NigerianState[]) => void;
+}) {
+  return (
+    <fieldset aria-describedby="service-states-message">
+      <legend className="mb-1.5 text-[0.8125rem] font-semibold">States you serve</legend>
+      <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto rounded-2xl bg-white p-3 ring-1 ring-foreground/8">
+        {NIGERIAN_STATES.map((s) => {
+          const on = selected.includes(s.value);
+          return (
+            <button
+              key={s.value}
+              type="button"
+              name={s.value === NIGERIAN_STATES[0].value ? "serviceStates" : undefined}
+              aria-pressed={on}
+              disabled={disabled}
+              onClick={() => onChange(on ? selected.filter((v) => v !== s.value) : [...selected, s.value])}
+              className={`h-8 rounded-full px-3 text-xs font-medium ring-1 outline-none focus-visible:ring-2 focus-visible:ring-accent ${on ? "bg-primary text-primary-foreground ring-primary" : "bg-white text-foreground/75 ring-foreground/10 hover:bg-primary/5"}`}
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+      <p id="service-states-message" className={`mt-1.5 text-xs ${error ? "text-red-700" : "text-muted-foreground"}`}>
+        {error ?? `${selected.length} selected. Customers in these states can book you.`}
+      </p>
+    </fieldset>
   );
 }
