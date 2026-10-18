@@ -41,6 +41,9 @@ export default async function ListingsPage({
           <Icon name="plus" className="size-5" />
           New listing
         </Link>
+        <Link href="/market/promotions" className={buttonClasses("outline")}>
+          Promotions &amp; coupon codes
+        </Link>
         {products.length ? (
           <ListCard label="Your listings">
             {products.map((p) => (

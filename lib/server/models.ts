@@ -14,6 +14,7 @@ import type {
   ProductUnit,
 } from "@/lib/orders/types";
 import type { CredentialStatus } from "@/lib/profile/types";
+import type { PromotionScope, PromotionStatus, PromotionType } from "@/lib/promotions/types";
 import type {
   ExternalChannel,
   NotificationCategory,
@@ -57,6 +58,8 @@ export const COLLECTIONS = {
   notificationPreferences: "notification_preferences",
   pushSubscriptions: "push_subscriptions",
   adminAudit: "admin_audit",
+  promotions: "promotions",
+  promotionRedemptions: "promotion_redemptions",
 } as const;
 
 export type UserStatus = "pending_verification" | "active";
@@ -469,7 +472,31 @@ export type OrderItemDoc = {
   unit: ProductUnit;
   unitPriceKobo: number;
   quantity: number;
+  /** unit price × quantity, before any promotion */
   lineTotalKobo: number;
+  /** this line's share of the order's promotion discount; absent on orders without one */
+  discountKobo?: number;
+};
+
+/**
+ * The promotion an order used, copied when the order was placed so later
+ * edits, pauses or deletions of the promotion never change the order.
+ */
+export type OrderPromotionDoc = {
+  promotionId: ObjectId;
+  /** the promotion's version that was priced */
+  version: number;
+  name: string;
+  code: string | null;
+  type: PromotionType;
+  value: number;
+  scope: PromotionScope;
+  productIds: ObjectId[];
+  minOrderKobo: number | null;
+  maxDiscountKobo: number | null;
+  eligibleSubtotalKobo: number;
+  /** subtotalKobo − discountKobo = totalKobo */
+  discountKobo: number;
 };
 
 export type OrderHistoryDoc = { event: OrderEventName; at: Date; by: OrderActor; userId: ObjectId | null };
@@ -492,8 +519,12 @@ export type OrderDoc = {
   buyerName: string;
   sellerName: string;
   items: OrderItemDoc[];
+  /** the items at their listed prices */
   subtotalKobo: number;
+  /** what the buyer pays: the subtotal less any promotion discount */
   totalKobo: number;
+  /** the seller's promotion this order used; absent or null when none */
+  promotion?: OrderPromotionDoc | null;
   currency: Currency;
   deliveryNote: string;
   /**
@@ -768,4 +799,63 @@ export type AdminAuditDoc = {
   from: string | null;
   to: string | null;
   at: Date;
+};
+
+// --- promotions ----------------------------------------------------------------------
+
+/**
+ * A seller's sale or coupon code. Funded by that seller: it only ever lowers
+ * the price of their own products. Every change bumps `version`, and an
+ * order is only placed against the version it was priced with.
+ */
+export type PromotionDoc = {
+  _id: ObjectId;
+  sellerUserId: ObjectId;
+  name: string;
+  description: string;
+  type: PromotionType;
+  /** whole percent, or kobo */
+  value: number;
+  scope: PromotionScope;
+  /** empty when scope is "all" */
+  productIds: ObjectId[];
+  /** normalized (trimmed, uppercased) and unique; null for an automatic sale */
+  code: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  minOrderKobo: number | null;
+  maxDiscountKobo: number | null;
+  totalLimit: number | null;
+  perBuyerLimit: number | null;
+  status: PromotionStatus;
+  version: number;
+  /** uses held by unpaid orders plus uses by paid ones; released uses are subtracted */
+  redemptionCount: number;
+  history: Array<{ event: "created" | "edited" | "activated" | "paused" | "ended"; at: Date }>;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type RedemptionStatus = "reserved" | "redeemed" | "released";
+
+/**
+ * One order's use of a promotion. Reserved when the order is placed,
+ * redeemed when it is paid, released if it is cancelled or expires; one per
+ * order (a unique index).
+ */
+export type PromotionRedemptionDoc = {
+  _id: ObjectId;
+  promotionId: ObjectId;
+  sellerUserId: ObjectId;
+  buyerUserId: ObjectId;
+  orderId: ObjectId;
+  orderNumber: string;
+  status: RedemptionStatus;
+  discountKobo: number;
+  eligibleSubtotalKobo: number;
+  /** what the buyer pays for the order */
+  totalKobo: number;
+  reservedAt: Date;
+  redeemedAt: Date | null;
+  releasedAt: Date | null;
 };

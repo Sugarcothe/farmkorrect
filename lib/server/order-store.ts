@@ -21,6 +21,7 @@ import {
   type ProductDoc,
   type RefundDoc,
 } from "./models";
+import { releaseForOrder, toOrderPromotion } from "./promotions";
 
 // Shared plumbing for the order modules (order-ledger, order-refunds,
 // order-payments, orders, order-jobs): collections, history items, the
@@ -174,8 +175,11 @@ export function toOrder(order: OrderDoc, viewer: "buyer" | "seller", now = new D
       unitPriceKobo: item.unitPriceKobo,
       quantity: item.quantity,
       lineTotalKobo: item.lineTotalKobo,
+      discountKobo: item.discountKobo ?? 0,
     })),
     subtotalKobo: order.subtotalKobo,
+    discountKobo: order.promotion?.discountKobo ?? 0,
+    promotion: order.promotion ? toOrderPromotion(order.promotion) : null,
     totalKobo: order.totalKobo,
     currency: order.currency,
     deliveryNote: order.deliveryNote,
@@ -243,6 +247,8 @@ export async function releaseStock(orderId: ObjectId, by: OrderActor): Promise<b
     if (!order) return false;
     for (const item of order.items)
       await products.updateOne({ _id: item.productId }, { $inc: { stockQuantity: item.quantity } }, { session });
+    // and its use of a promotion, so the seller's limit counts only orders that went ahead
+    await releaseForOrder(session, order, now);
     return true;
   });
 }

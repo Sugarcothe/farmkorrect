@@ -15,6 +15,8 @@ import {
   validateRefundReason,
 } from "@/lib/orders/validation";
 import { cleanText } from "@/lib/profile/validation";
+import { normalizeCouponCode } from "@/lib/promotions/types";
+import { validateCouponCode } from "@/lib/promotions/validation";
 import { formatKobo, isKobo } from "@/lib/wallet/money";
 import { CURRENCY, SETTLEMENT_DELAY_MS } from "@/lib/wallet/types";
 import { recordAudit } from "./admin-audit";
@@ -38,6 +40,7 @@ import {
   reservationEnd,
 } from "./order-store";
 import { fulfillmentOf, parseObjectId, SELLER_ROLE } from "./products";
+import { choosePromotion, orderPromotionSnapshot, reserveRedemption } from "./promotions";
 
 // Placing orders and the buyer's and seller's actions on them. The buyer and
 // seller always come from the session; prices, the seller, stock and totals
@@ -59,21 +62,15 @@ function newOrderNumber(): string {
 // --- placing an order ----------------------------------------------------------------
 
 type ParsedItem = { productId: ObjectId; quantity: number };
-export type ParsedOrderRequest = Omit<OrderRequest, "items"> & { items: ParsedItem[] };
+export type ParsedOrderRequest = Omit<OrderRequest, "items" | "couponCode"> & { items: ParsedItem[]; couponCode: string | null };
 
-export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderRequest {
-  const fieldErrors: Record<string, string> = {};
-  // prices, totals, sellers and statuses are never accepted
-  for (const key of Object.keys(body))
-    if (!["items", "fulfillmentMethod", "deliveryNote", "idempotencyKey", "expectedTotalKobo"].includes(key))
-      fieldErrors[key] = "This field can't be set.";
-
+function parseItems(value: unknown, fieldErrors: Record<string, string>): ParsedItem[] {
   const items: ParsedItem[] = [];
-  if (!Array.isArray(body.items) || body.items.length === 0) fieldErrors.items = "Add at least one product.";
-  else if (body.items.length > ORDER_LIMITS.items) fieldErrors.items = `An order can have up to ${ORDER_LIMITS.items} products.`;
+  if (!Array.isArray(value) || value.length === 0) fieldErrors.items = "Add at least one product.";
+  else if (value.length > ORDER_LIMITS.items) fieldErrors.items = `An order can have up to ${ORDER_LIMITS.items} products.`;
   else {
     const seen = new Set<string>();
-    for (const raw of body.items) {
+    for (const raw of value) {
       const item = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
       const productId = parseObjectId(item.productId);
       const { quantity } = item;
@@ -93,7 +90,17 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
       items.push({ productId, quantity });
     }
   }
+  return items;
+}
 
+export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderRequest {
+  const fieldErrors: Record<string, string> = {};
+  // prices, totals, sellers and statuses are never accepted
+  for (const key of Object.keys(body))
+    if (!["items", "fulfillmentMethod", "deliveryNote", "idempotencyKey", "expectedTotalKobo", "couponCode"].includes(key))
+      fieldErrors[key] = "This field can't be set.";
+
+  const items = parseItems(body.items, fieldErrors);
   const { fulfillmentMethod } = body;
   if (!isFulfillmentMethod(fulfillmentMethod)) fieldErrors.fulfillmentMethod = "Choose pickup or delivery.";
   const deliveryNote = typeof body.deliveryNote === "string" ? cleanText(body.deliveryNote, true) : "";
@@ -104,9 +111,11 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
     fieldErrors.idempotencyKey = "Reload the page and try again.";
   if (expectedTotalKobo !== undefined && !isKobo(expectedTotalKobo))
     fieldErrors.expectedTotalKobo = "Reload the page and try again.";
+  const couponCode = parseCouponCode(body.couponCode, fieldErrors);
   if (Object.keys(fieldErrors).length)
     throw new HttpError(400, "Some details aren't valid. Check the highlighted fields.", fieldErrors);
   return {
+    couponCode,
     items,
     fulfillmentMethod: fulfillmentMethod as FulfillmentMethod,
     deliveryNote,
@@ -115,10 +124,38 @@ export function parseOrderRequest(body: Record<string, unknown>): ParsedOrderReq
   };
 }
 
+/** A checkout preview: the products and quantities, and the code if one was entered. */
+export function parseQuoteRequest(body: Record<string, unknown>): { items: ParsedItem[]; couponCode: string | null } {
+  const fieldErrors: Record<string, string> = {};
+  for (const key of Object.keys(body))
+    if (key !== "items" && key !== "couponCode") fieldErrors[key] = "This field can't be set.";
+  const items = parseItems(body.items, fieldErrors);
+  const couponCode = parseCouponCode(body.couponCode, fieldErrors);
+  if (Object.keys(fieldErrors).length)
+    throw new HttpError(400, "Some details aren't valid. Check the highlighted fields.", fieldErrors);
+  return { items, couponCode };
+}
+
+/** An optional coupon code, normalized; null when none was entered. */
+export function parseCouponCode(value: unknown, fieldErrors: Record<string, string>): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || value.length > 40) {
+    fieldErrors.couponCode = "Enter the code as the seller gave it.";
+    return null;
+  }
+  if (validateCouponCode(value)) {
+    fieldErrors.couponCode = "We don't recognise this code. Check it and try again.";
+    return null;
+  }
+  return normalizeCouponCode(value) || null;
+}
+
 function requestHash(input: ParsedOrderRequest): string {
   const items = input.items.map((i) => `${i.productId.toHexString()}x${i.quantity}`).join(",");
+  // a code is only hashed when given, so orders placed before coupons keep their hash
+  const coupon = input.couponCode ? `\u0000coupon:${input.couponCode}` : "";
   return createHash("sha256")
-    .update(`${items}\u0000${input.deliveryNote}\u0000${input.fulfillmentMethod}`)
+    .update(`${items}\u0000${input.deliveryNote}\u0000${input.fulfillmentMethod}${coupon}`)
     .digest("hex");
 }
 
@@ -224,13 +261,25 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
   }
   const subtotalKobo = items.reduce((sum, item) => sum + item.lineTotalKobo, 0);
   if (!isKobo(subtotalKobo)) throw new HttpError(400, "This order is larger than we can take. Reduce the quantity.");
-  if (input.expectedTotalKobo !== undefined && input.expectedTotalKobo !== subtotalKobo)
+
+  // one seller promotion at most, priced here from the database
+  const sellerUserId = docs[0].sellerUserId;
+  const { priced, couponError } = await choosePromotion(
+    buyer._id,
+    sellerUserId,
+    items.map((i) => ({ productId: i.productId.toHexString(), lineTotalKobo: i.lineTotalKobo })),
+    input.couponCode,
+  );
+  if (couponError) throw new HttpError(422, couponError, { couponCode: couponError });
+  const promotion = priced ? orderPromotionSnapshot(priced) : null;
+  if (priced) priced.discount.lineDiscounts.forEach((share, i) => (items[i].discountKobo = share));
+  const totalKobo = subtotalKobo - (promotion?.discountKobo ?? 0);
+  if (input.expectedTotalKobo !== undefined && input.expectedTotalKobo !== totalKobo)
     throw new HttpError(
       409,
-      `The price changed since you opened this page. The total is now ${formatKobo(subtotalKobo)}. Check it and place the order again.`,
+      `The price changed since you opened this page. The total is now ${formatKobo(totalKobo)}. Check it and place the order again.`,
     );
 
-  const sellerUserId = docs[0].sellerUserId;
   const seller = await (await getDb())
     .collection<UserDoc>(COLLECTIONS.users)
     .findOne({ _id: sellerUserId, status: "active", role: SELLER_ROLE });
@@ -270,8 +319,10 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
         sellerName: seller.fullName,
         items,
         subtotalKobo,
+        // the seller's promotion as it is now; later edits to it don't change this order
+        promotion,
         // no delivery fee or tax is charged: the seller arranges delivery
-        totalKobo: subtotalKobo,
+        totalKobo,
         currency: CURRENCY,
         deliveryNote: input.deliveryNote,
         // a record of what was agreed; it adds nothing to the total
@@ -301,6 +352,8 @@ export async function createOrder(buyer: UserDoc, input: ParsedOrderRequest): Pr
         createdAt: now,
         updatedAt: now,
       };
+      // takes one use of the promotion, or refuses the order if it changed or ran out
+      await reserveRedemption(session, order, now);
       await orders.insertOne(order, { session });
       return order;
     });

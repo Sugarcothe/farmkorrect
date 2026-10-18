@@ -39,6 +39,9 @@ export default async function IssuePage({ params }: { params: Promise<{ number: 
           label="Order and money"
           rows={[
             ["Order total", formatKobo(c.totalKobo)],
+            ...(c.discountKobo
+              ? [["Seller's discount", `${formatKobo(c.discountKobo)} (${c.promotionLabel ?? "promotion"})`] as [string, string]]
+              : []),
             ["Payment", humanize(c.paymentStatus)],
             ["Delivery", humanize(c.fulfillmentStatus)],
             ["Refunded", c.refundedKobo ? formatKobo(c.refundedKobo) : "Nothing"],

@@ -13,6 +13,7 @@ import {
   type ProductCategory,
   type ProductUnit,
 } from "@/lib/orders/types";
+import { offerLabel } from "@/lib/promotions/types";
 import { formatKobo } from "@/lib/wallet/money";
 import { OrderFulfillmentDetails } from "./fulfillment-parts";
 
@@ -101,7 +102,10 @@ export function Card({ title, children }: { title?: string; children: ReactNode 
   );
 }
 
-/** The items, their stored prices and the total (no delivery fee or tax is added). */
+/**
+ * The items, their stored prices and the total (no delivery fee or tax is
+ * added). A promotion is shown as it was when the order was placed.
+ */
 export function OrderItems({ order }: { order: Order }) {
   return (
     <Card title="Items">
@@ -114,10 +118,32 @@ export function OrderItems({ order }: { order: Order }) {
                 {item.quantity} × {formatKobo(item.unitPriceKobo)} {unitLabel(item.unit)}
               </span>
             </span>
-            <span className="shrink-0 tabular-nums">{formatKobo(item.lineTotalKobo)}</span>
+            <span className="shrink-0 text-right tabular-nums">
+              {formatKobo(item.lineTotalKobo)}
+              {item.discountKobo > 0 && (
+                <span className="block text-xs text-primary">−{formatKobo(item.discountKobo)} off</span>
+              )}
+            </span>
           </li>
         ))}
       </ul>
+      {order.promotion && order.discountKobo > 0 && (
+        <div className="mt-3 space-y-1 border-t border-foreground/8 pt-3 text-sm">
+          <p className="flex justify-between">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="tabular-nums">{formatKobo(order.totalKobo + order.discountKobo)}</span>
+          </p>
+          <p className="flex justify-between gap-3 text-primary">
+            <span>
+              {order.promotion.code ? `Code ${order.promotion.code}` : order.promotion.name}
+              <span className="block text-xs text-muted-foreground">
+                Seller&rsquo;s discount ({offerLabel(order.promotion, formatKobo)})
+              </span>
+            </span>
+            <span className="tabular-nums">−{formatKobo(order.discountKobo)}</span>
+          </p>
+        </div>
+      )}
       <div className="mt-3 flex justify-between border-t border-foreground/8 pt-3 text-sm font-semibold">
         <span>Total</span>
         <span className="tabular-nums">{formatKobo(order.totalKobo)}</span>

@@ -104,7 +104,12 @@ export type IssueCase = {
   closedAt: string | null;
   /** the internal resolution note (admins only) */
   resolutionNote: string | null;
+  /** what the buyer was charged, after any seller promotion */
   totalKobo: number;
+  /** the seller-funded discount on the order (0 when none) */
+  discountKobo: number;
+  /** "Name" or "Code CODE" of that promotion, as placed */
+  promotionLabel: string | null;
   paymentStatus: string;
   fulfillmentStatus: string;
   refundedKobo: number;
