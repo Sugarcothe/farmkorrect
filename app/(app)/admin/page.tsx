@@ -89,6 +89,10 @@ export default async function AdminPage() {
           <Icon name="list" className="size-4" />
           Marketplace analytics
         </Link>
+        <Link href="/admin/training" className={buttonClasses("outline", "-mt-2 gap-2")}>
+          <Icon name="graduation-cap" className="size-4" />
+          Training courses
+        </Link>
 
         <section aria-labelledby="recent-heading">
           <div className="mb-2 flex items-center justify-between">

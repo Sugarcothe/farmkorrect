@@ -11,6 +11,10 @@ export const ADMIN_ACTIONS = [
   "review.reject",
   "review.remove",
   "review.restore",
+  "course.create",
+  "course.update",
+  "course.publish",
+  "course.unpublish",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -23,12 +27,16 @@ export const ADMIN_ACTION_LABELS: Record<AdminAction, string> = {
   "review.reject": "Review rejected",
   "review.remove": "Review removed",
   "review.restore": "Review restored",
+  "course.create": "Course created",
+  "course.update": "Course edited",
+  "course.publish": "Course published",
+  "course.unpublish": "Course unpublished",
 };
 
 export const isAdminAction = (value: unknown): value is AdminAction =>
   typeof value === "string" && (ADMIN_ACTIONS as readonly string[]).includes(value);
 
-export const AUDIT_TARGET_TYPES = ["user", "order", "review"] as const;
+export const AUDIT_TARGET_TYPES = ["user", "order", "review", "course"] as const;
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
 
 export const isAuditTargetType = (value: unknown): value is AuditTargetType =>

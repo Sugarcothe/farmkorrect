@@ -56,6 +56,11 @@ export const LIMITS = {
   appointmentCreatesPerUser: { limit: 20, windowMs: 60 * 60_000 },
   appointmentActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
   appointmentReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
+  // Korret Academy
+  trainingReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
+  // playback positions are saved every 15 s at most while a video plays
+  trainingProgressWritesPerUser: { limit: 600, windowMs: 15 * 60_000 },
+  staffChangesPerUser: { limit: 60, windowMs: 60 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;
