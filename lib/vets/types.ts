@@ -1,4 +1,6 @@
+import type { FarmType } from "@/lib/auth/types";
 import type { NigerianState } from "@/lib/locations/nigeria";
+import type { VisitRecord } from "./visit";
 
 // Public shapes for Find a Vet (the `data` of an ApiResult), shared by the
 // browser and the server. Nothing here carries a phone number, registration
@@ -145,6 +147,9 @@ export type AppointmentLocation = {
 
 export type AppointmentHistoryItem = { status: BookingStatus; by: AppointmentActor; at: string; note: string | null };
 
+/** The flock on the farm the customer chose when booking, from their own farm profile. */
+export type AppointmentFarm = { farmType: FarmType; birdCount: number };
+
 export type Appointment = {
   id: string;
   reference: string;
@@ -156,6 +161,8 @@ export type Appointment = {
   startsAt: string;
   endsAt: string;
   location: AppointmentLocation;
+  /** null when the booking wasn't made for one of the customer's farms */
+  farm: AppointmentFarm | null;
   priceKobo: number;
   feeKobo: number;
   totalKobo: number;
@@ -163,18 +170,23 @@ export type Appointment = {
   paymentStatus: AppointmentPaymentStatus;
   /** when an unanswered request lapses */
   respondBy: string;
+  /** when the vet started the visit (the in_progress transition); null before, or if it can't be established */
+  startedAt: string | null;
+  completedAt: string | null;
   history: AppointmentHistoryItem[];
   /** what this viewer may do now (the server checks again) */
   actions: AppointmentAction[];
   /** the customer may cancel a confirmed visit until then */
   cancelUntil: string;
   createdAt: string;
+  /** the visit checklist and private notes: the assigned vet only, once the visit has started; null otherwise */
+  visit: VisitRecord | null;
 };
 
 export type AppointmentSummary = Pick<
   Appointment,
   "id" | "reference" | "viewer" | "startsAt" | "bookingStatus" | "paymentStatus" | "totalKobo"
-> & { otherParty: string; serviceName: string };
+> & { otherParty: string; serviceName: string; farmName: string; farm: AppointmentFarm | null };
 
 export type AppointmentResponse = { appointment: Appointment };
 export type AppointmentListResponse = { appointments: AppointmentSummary[]; nextCursor: string | null };
@@ -203,6 +215,28 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   declined: "Declined",
   cancelled: "Cancelled",
   expired: "Not answered in time",
+};
+
+/** The vet's job list tabs. "closed": declined, cancelled and expired, which are never "completed". */
+export const JOB_TABS = [
+  { value: "pending", label: "Pending", statuses: ["requested"] },
+  { value: "active", label: "Active", statuses: ["confirmed", "en_route", "in_progress"] },
+  { value: "completed", label: "Completed", statuses: ["completed"] },
+  { value: "closed", label: "Closed", statuses: ["declined", "cancelled", "expired"] },
+] as const satisfies readonly { value: string; label: string; statuses: readonly BookingStatus[] }[];
+export type JobTab = (typeof JOB_TABS)[number]["value"];
+export const isJobTab = (value: unknown): value is JobTab => JOB_TABS.some((t) => t.value === value);
+
+/** Status chips on the vet's side, where "Waiting for the vet" would read oddly. */
+export const VET_STATUS_LABELS: Record<BookingStatus, string> = {
+  requested: "Pending",
+  confirmed: "Confirmed",
+  en_route: "On the way",
+  in_progress: "In progress",
+  completed: "Completed",
+  declined: "Declined",
+  cancelled: "Cancelled",
+  expired: "Expired",
 };
 
 export const OPEN_BOOKING_STATUSES: readonly BookingStatus[] = ["requested", "confirmed", "en_route", "in_progress"];

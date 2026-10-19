@@ -380,10 +380,12 @@ export function appointmentEventSpecs(appointment: AppointmentDoc, index: number
       ];
     case "en_route":
       return [customer("appointment_en_route", "Vet on the way", `Your vet marked themselves on the way for ${what}.`)];
+    case "in_progress":
+      // only that it started: the vet's checklist and clinical notes are never part of a notification
+      return [customer("appointment_started", "Visit started", `Your vet started ${what}.`)];
     case "completed":
       return [customer("appointment_completed", "Appointment completed", `${what} was marked completed by the vet.`)];
     default:
-      // in_progress: nothing to tell anyone
       return [];
   }
 }

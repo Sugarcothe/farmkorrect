@@ -116,6 +116,7 @@ export const NOTIFICATION_TYPES = {
   appointment_cancelled: { category: "appointments", icon: "x", channels: ["email", "sms", "push"] },
   appointment_expired: { category: "appointments", icon: "alert-circle", channels: ["email", "push"] },
   appointment_en_route: { category: "appointments", icon: "list", channels: ["push"] },
+  appointment_started: { category: "appointments", icon: "list", channels: ["push"] },
   appointment_completed: { category: "appointments", icon: "check-circle", channels: ["email", "push"] },
   // Other Services bookings (customer and provider)
   service_booking_requested: { category: "bookings", icon: "list", channels: ["email", "sms", "push"] },

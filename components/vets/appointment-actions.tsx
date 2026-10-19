@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormAlert } from "@/components/auth/auth-screen";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,11 @@ const DONE: Record<AppointmentAction, string> = {
 /** Actions that need a confirmation and take an optional reason. */
 const ASKS_REASON: readonly AppointmentAction[] = ["decline", "cancel"];
 
+/** Actions confirmed in a second step, with what accepting commits the vet to. */
+const CONFIRMS: Partial<Record<AppointmentAction, string>> = {
+  accept: "Accept this visit? The customer is told straight away and the time stays booked for them.",
+};
+
 /**
  * The buttons for what this viewer may do now. The server lists the
  * allowed actions and checks them again; each change carries the status
@@ -41,8 +46,11 @@ export function AppointmentActions({ appointment }: { appointment: Appointment }
   const [asking, setAsking] = useState<AppointmentAction | null>(null);
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const inFlight = useRef(false);
 
   async function run(action: AppointmentAction) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(action);
     setMessage(null);
     const res = await changeAppointment(appointment.id, {
@@ -50,6 +58,7 @@ export function AppointmentActions({ appointment }: { appointment: Appointment }
       expectedStatus: appointment.bookingStatus,
       ...(reason.trim() ? { reason: reason.trim() } : {}),
     });
+    inFlight.current = false;
     setBusy(null);
     setAsking(null);
     setReason("");
@@ -57,18 +66,40 @@ export function AppointmentActions({ appointment }: { appointment: Appointment }
     router.refresh();
   }
 
-  const primary = appointment.actions.filter((a) => !ASKS_REASON.includes(a));
-  const secondary = appointment.actions.filter((a) => ASKS_REASON.includes(a));
+  // the vet completes a visit from the visit record, which checks what's still needed
+  const shown = appointment.actions.filter((a) => !(a === "complete" && appointment.viewer === "vet"));
+  const primary = shown.filter((a) => !ASKS_REASON.includes(a));
+  const secondary = shown.filter((a) => ASKS_REASON.includes(a));
   const customerCanCancel = appointment.viewer === "customer" && appointment.bookingStatus === "confirmed";
 
   return (
     <div className="space-y-3">
       {message && <FormAlert tone={message.tone}>{message.text}</FormAlert>}
-      {primary.map((a) => (
-        <Button key={a} type="button" loading={busy === a} disabled={busy !== null} onClick={() => void run(a)}>
-          {LABELS[a]}
-        </Button>
-      ))}
+      {primary.map((a) =>
+        CONFIRMS[a] && asking === a ? (
+          <div key={a} className="space-y-3 rounded-2xl bg-white p-4 ring-1 ring-foreground/8">
+            <p className="text-sm">{CONFIRMS[a]}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" disabled={busy !== null} onClick={() => setAsking(null)}>
+                Go back
+              </Button>
+              <Button type="button" loading={busy === a} onClick={() => void run(a)}>
+                {LABELS[a]}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            key={a}
+            type="button"
+            loading={busy === a}
+            disabled={busy !== null}
+            onClick={() => (CONFIRMS[a] ? setAsking(a) : void run(a))}
+          >
+            {LABELS[a]}
+          </Button>
+        ),
+      )}
       {secondary.map((a) =>
         asking === a ? (
           <form
