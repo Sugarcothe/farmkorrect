@@ -34,6 +34,7 @@ import type {
 } from "@/lib/services/marketplace";
 import type { CourseCategory, CourseStatus, Difficulty, StaffRole, StaffStatus } from "@/lib/training/types";
 import type { AppointmentActor, AppointmentPaymentStatus, BookingStatus, SlotMinutes, WeeklyHours } from "@/lib/vets/types";
+import type { VisitNotes } from "@/lib/vets/visit";
 import type {
   Currency,
   EarningSourceType,
@@ -965,6 +966,24 @@ export type AppointmentHistoryDoc = {
 };
 
 /**
+ * The vet's record of a visit, created when it starts. The checklist is a
+ * snapshot of the template for the service category at that moment, so a
+ * later template change never rewrites a visit. The notes are private to
+ * the assigned vet. See docs/vet-job-workflow.md.
+ */
+export type AppointmentVisitDoc = {
+  template: { category: string; version: number };
+  checklist: { id: string; label: string; required: boolean; doneAt: Date | null; doneBy: ObjectId | null }[];
+  vaccineDetails: boolean;
+  notes: VisitNotes;
+  /** +1 on each save; a save must name the version it was based on */
+  notesVersion: number;
+  notesUpdatedAt: Date | null;
+  notesUpdatedBy: ObjectId | null;
+  createdAt: Date;
+};
+
+/**
  * One booking of a vet's service. The service, price and farm location are
  * copied in when it's made, so later edits never change it. Booking and
  * payment have separate statuses; payment is never collected in the app yet
@@ -987,6 +1006,11 @@ export type AppointmentDoc = {
   respondBy: Date;
   idempotencyKey: string;
   history: AppointmentHistoryDoc[];
+  /** set with the in_progress / completed transitions; absent on older appointments (use history) */
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  /** absent until the visit starts, and on visits started before visit records existed */
+  visit?: AppointmentVisitDoc | null;
   /** the slot holds were deleted (declined, cancelled or lapsed) */
   slotsReleasedAt: Date | null;
   /** see NotificationDoc: set with each change that notifies someone */

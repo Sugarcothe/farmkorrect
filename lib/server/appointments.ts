@@ -11,9 +11,13 @@ import {
   type Appointment,
   type AppointmentAction,
   type AppointmentActor,
+  type AppointmentFarm,
   type AppointmentSummary,
   type BookingStatus,
+  JOB_TABS,
+  type JobTab,
 } from "@/lib/vets/types";
+import { missingForCompletion } from "@/lib/vets/visit";
 import { getDb } from "./db";
 import { HttpError } from "./http";
 import {
@@ -27,6 +31,7 @@ import { queueNotifications, syncAppointmentNotifications } from "./notification
 import { inTransaction } from "./order-store";
 import { heldFor } from "./vet-availability";
 import { findBookableVet, parseId, refreshStaleDirectory, vetCollections } from "./vet-directory";
+import { COMPLETABLE, ensureVisit, newVisit, toVisitRecord, visitCompletedAt, visitStartedAt } from "./visits";
 
 // Vet appointments: booking, the status machine and what each party sees.
 //
@@ -313,15 +318,21 @@ async function move(
 ): Promise<AppointmentDoc | null> {
   const { appointments, slots } = await appointmentCollections();
   const release = RELEASES.includes(to);
+  // completing needs the visit record finished, checked in the same update
+  const filter: Filter<AppointmentDoc> =
+    to === "completed" ? { _id: doc._id, bookingStatus: from, ...COMPLETABLE } : { _id: doc._id, bookingStatus: from };
   const updated = await inTransaction(async (session: ClientSession) => {
     const after = await appointments.findOneAndUpdate(
-      { _id: doc._id, bookingStatus: from } as Filter<AppointmentDoc>,
+      filter,
       {
         $set: {
           bookingStatus: to,
           notifySyncAt: item.at,
           updatedAt: item.at,
           ...(release ? { slotsReleasedAt: item.at } : {}),
+          // the checklist is snapshotted when the visit starts, so later template changes don't alter it
+          ...(to === "in_progress" ? { startedAt: item.at, visit: newVisit(doc.service.category, item.at) } : {}),
+          ...(to === "completed" ? { completedAt: item.at } : {}),
         },
         $push: { history: item },
       },
@@ -356,7 +367,18 @@ export async function transitionAppointment(
     throw new HttpError(403, "Your credentials need to be approved before you can accept appointments.");
 
   const to = TARGET[input.action];
-  const updated = await move(doc, doc.bookingStatus, to, historyItem(to, viewer, user._id, now, input.reason));
+  let from = doc;
+  if (to === "completed") {
+    // the server decides whether the visit record is finished; nothing the browser says counts
+    from = await ensureVisit(doc, now);
+    const record = toVisitRecord(from);
+    const missing = record ? missingForCompletion(record) : ["The visit record"];
+    if (missing.length > 0)
+      throw new HttpError(409, "Finish the visit record before completing this visit.", {
+        missing: `Still needed: ${missing.join("; ")}.`,
+      });
+  }
+  const updated = await move(from, from.bookingStatus, to, historyItem(to, viewer, user._id, now, input.reason));
   if (!updated) throw stale();
   return { doc: updated, viewer };
 }
@@ -417,10 +439,11 @@ const SHARES_CONTACT: readonly BookingStatus[] = ["confirmed", "en_route", "in_p
 export async function toAppointment(doc: AppointmentDoc, viewer: Viewer, now = new Date()): Promise<Appointment> {
   const { users, availability } = await appointmentCollections();
   const projection = { fullName: 1, phoneNormalized: 1, "profile.photo.url": 1 } as const;
-  const [vet, customer, settings] = await Promise.all([
+  const [vet, customer, settings, farms] = await Promise.all([
     users.findOne({ _id: doc.vetUserId }, { projection }),
     users.findOne({ _id: doc.customerUserId }, { projection }),
     availability.findOne({ _id: doc.vetUserId }, { projection: { sharePhoneWithClients: 1 } }),
+    farmsFor([doc]),
   ]);
   const open = SHARES_CONTACT.includes(doc.bookingStatus);
   return {
@@ -450,6 +473,7 @@ export async function toAppointment(doc: AppointmentDoc, viewer: Viewer, now = n
       state: doc.location.state,
       directions: doc.location.directions,
     },
+    farm: farmOf(doc, farms),
     priceKobo: doc.price.priceKobo,
     feeKobo: doc.price.feeKobo,
     totalKobo: doc.price.totalKobo,
@@ -460,8 +484,40 @@ export async function toAppointment(doc: AppointmentDoc, viewer: Viewer, now = n
     actions: actionsFor(doc, viewer, now),
     cancelUntil: new Date(doc.startsAt.getTime() - BOOKING_RULES.customerCancelCutoffMs).toISOString(),
     createdAt: doc.createdAt.toISOString(),
+    startedAt: visitStartedAt(doc)?.toISOString() ?? null,
+    completedAt: visitCompletedAt(doc)?.toISOString() ?? null,
+    // the checklist and clinical notes are the vet's own record; the customer never receives them
+    visit: viewer === "vet" ? toVisitRecord(doc) : null,
   };
 }
+
+/**
+ * The flock on each appointment's farm, read live from the customer's own
+ * farm (only while it still belongs to them). None for an address typed in
+ * without a farm, or a farm since deleted.
+ */
+async function farmsFor(docs: AppointmentDoc[]): Promise<Map<string, AppointmentFarm>> {
+  const linked = docs.filter((d) => d.location.farmId);
+  if (linked.length === 0) return new Map();
+  const { farms } = await appointmentCollections();
+  const found = await farms
+    .find(
+      { $or: linked.map((d) => ({ _id: d.location.farmId as ObjectId, ownerUserId: d.customerUserId })) },
+      { projection: { farmType: 1, birdCount: 1, ownerUserId: 1 } },
+    )
+    .toArray();
+  return new Map(
+    found.map((f) => [
+      `${f._id.toHexString()}.${f.ownerUserId.toHexString()}`,
+      { farmType: f.farmType, birdCount: f.birdCount },
+    ]),
+  );
+}
+
+const farmOf = (doc: AppointmentDoc, farms: Map<string, AppointmentFarm>) =>
+  doc.location.farmId
+    ? (farms.get(`${doc.location.farmId.toHexString()}.${doc.customerUserId.toHexString()}`) ?? null)
+    : null;
 
 /** Reads one appointment for its customer or vet, lapsing it first if its time to answer has passed. */
 export async function getAppointment(user: UserDoc, id: unknown, now = new Date()): Promise<Appointment | null> {
@@ -474,42 +530,76 @@ export async function getAppointment(user: UserDoc, id: unknown, now = new Date(
 
 export const APPOINTMENT_PAGE_SIZE = 20;
 
-function listCursor(view: Viewer, doc: Pick<AppointmentDoc, "startsAt" | "_id">) {
-  return Buffer.from(`${view}.${doc.startsAt.getTime()}.${doc._id.toHexString()}`).toString("base64url");
+/** A cursor belongs to one view (and, for a vet's jobs, one tab); it can't be replayed against another. */
+function listCursor(scope: string, doc: Pick<AppointmentDoc, "startsAt" | "_id">) {
+  return Buffer.from(`${scope}.${doc.startsAt.getTime()}.${doc._id.toHexString()}`).toString("base64url");
 }
 
-function readListCursor(view: Viewer, cursor: string): { at: Date; id: ObjectId } {
+function readListCursor(scope: string, cursor: string): { at: Date; id: ObjectId } {
   const bad = new HttpError(400, "This list has changed. Reload to start again.");
   if (cursor.length > 120) throw bad;
-  const m = /^(customer|vet)\.(\d{1,15})\.([0-9a-f]{24})$/.exec(Buffer.from(cursor, "base64url").toString("utf8"));
-  if (!m || m[1] !== view) throw bad;
+  const m = /^((?:customer|vet)(?:\.[a-z]{1,12})?)\.(\d{1,15})\.([0-9a-f]{24})$/.exec(
+    Buffer.from(cursor, "base64url").toString("utf8"),
+  );
+  if (!m || m[1] !== scope) throw bad;
   return { at: new Date(Number(m[2])), id: new ObjectId(m[3]) };
+}
+
+/** Upcoming work reads soonest first; finished and closed jobs newest first. */
+const ASCENDING_TABS: readonly JobTab[] = ["pending", "active"];
+
+/** Tab badges count up to this; more shows as "99+". */
+export const JOB_COUNT_CAP = 100;
+
+const tabStatuses = (tab: JobTab): BookingStatus[] => [...JOB_TABS.find((t) => t.value === tab)!.statuses];
+
+/** How many of the vet's jobs wait in Pending and Active (for the tab badges), capped. */
+export async function jobTabCounts(user: Pick<UserDoc, "_id">): Promise<Record<"pending" | "active", number>> {
+  const { appointments } = await appointmentCollections();
+  const count = (tab: JobTab) =>
+    appointments.countDocuments(
+      { vetUserId: user._id, bookingStatus: { $in: tabStatuses(tab) } },
+      { limit: JOB_COUNT_CAP },
+    );
+  const [pending, active] = await Promise.all([count("pending"), count("active")]);
+  return { pending, active };
 }
 
 /**
  * The user's appointments as a customer, or (vets) the ones booked with
- * them: newest start first, keyset paged on (startsAt, _id).
+ * them, keyset paged on (startsAt, _id). Without a tab: newest start first.
+ * A vet's job tab narrows by status on the server; Pending and Active list
+ * the soonest first.
  */
 export async function listAppointments(
   user: UserDoc,
   view: Viewer,
   cursor: string | null,
   now = new Date(),
+  tab: JobTab | null = null,
 ): Promise<{ appointments: AppointmentSummary[]; nextCursor: string | null }> {
   const { appointments, users } = await appointmentCollections();
+  if (tab && view !== "vet") throw new HttpError(400, "Unknown view.", { tab: "Job tabs are for vets." });
   const mine: Filter<AppointmentDoc> = view === "vet" ? { vetUserId: user._id } : { customerUserId: user._id };
   await expireLapsed(mine as { vetUserId?: ObjectId }, 20, now);
   const filter: Filter<AppointmentDoc> = { ...mine };
+  if (tab) filter.bookingStatus = { $in: tabStatuses(tab) };
+  const scope = tab ? `${view}.${tab}` : view;
+  const ascending = tab !== null && ASCENDING_TABS.includes(tab);
   if (cursor) {
-    const after = readListCursor(view, cursor);
-    filter.$or = [{ startsAt: { $lt: after.at } }, { startsAt: after.at, _id: { $lt: after.id } }];
+    const after = readListCursor(scope, cursor);
+    filter.$or = ascending
+      ? [{ startsAt: { $gt: after.at } }, { startsAt: after.at, _id: { $gt: after.id } }]
+      : [{ startsAt: { $lt: after.at } }, { startsAt: after.at, _id: { $lt: after.id } }];
   }
+  const order = ascending ? 1 : -1;
   const docs = await appointments
     .find(filter)
-    .sort({ startsAt: -1, _id: -1 })
+    .sort({ startsAt: order, _id: order })
     .limit(APPOINTMENT_PAGE_SIZE + 1)
     .toArray();
   const page = docs.slice(0, APPOINTMENT_PAGE_SIZE);
+  const farms = await farmsFor(page);
   const otherIds = [...new Set(page.map((d) => (view === "vet" ? d.customerUserId : d.vetUserId).toHexString()))].map(
     (id) => new ObjectId(id),
   );
@@ -530,8 +620,10 @@ export async function listAppointments(
       totalKobo: d.price.totalKobo,
       serviceName: d.service.name,
       otherParty: names.get((view === "vet" ? d.customerUserId : d.vetUserId).toHexString()) ?? "Former member",
+      farmName: d.location.farmName,
+      farm: farmOf(d, farms),
     })),
-    nextCursor: docs.length > APPOINTMENT_PAGE_SIZE ? listCursor(view, page[page.length - 1]) : null,
+    nextCursor: docs.length > APPOINTMENT_PAGE_SIZE ? listCursor(scope, page[page.length - 1]) : null,
   };
 }
 

@@ -3,12 +3,15 @@ import type { ReactNode } from "react";
 import { ProfileAvatar } from "@/components/profile/profile-parts";
 import { buttonClasses } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
+import { FARM_TYPE_LABELS } from "@/lib/auth/types";
 import { stateLabel } from "@/lib/locations/nigeria";
 import { formatSlot, minuteLabel, WEEKDAYS } from "@/lib/vets/schedule";
 import {
   BOOKING_STATUS_LABELS,
   isFullyConfirmed,
+  VET_STATUS_LABELS,
   type Appointment,
+  type AppointmentFarm,
   type AppointmentPaymentStatus,
   type AppointmentSummary,
   type BookingStatus,
@@ -38,14 +41,22 @@ const STATUS_TONES: Record<BookingStatus, keyof typeof TONES> = {
   expired: "neutral",
 };
 
-export function BookingBadge({ status }: { status: BookingStatus }) {
+/** The status chip; on the vet's side the labels read from their point of view ("Pending", not "Waiting for the vet"). */
+export function BookingBadge({ status, viewer = "customer" }: { status: BookingStatus; viewer?: Appointment["viewer"] }) {
   return (
     <span
       className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${TONES[STATUS_TONES[status]]}`}
     >
-      {BOOKING_STATUS_LABELS[status]}
+      {(viewer === "vet" ? VET_STATUS_LABELS : BOOKING_STATUS_LABELS)[status]}
     </span>
   );
+}
+
+/** "Layer · 1,200 birds" from the customer's farm record; null when the booking isn't linked to a farm. */
+export function flockLabel(farm: AppointmentFarm | null): string | null {
+  if (!farm) return null;
+  const birds = `${farm.birdCount.toLocaleString("en-NG")} ${farm.birdCount === 1 ? "bird" : "birds"}`;
+  return `${FARM_TYPE_LABELS[farm.farmType]} · ${birds}`;
 }
 
 export const PAYMENT_LABELS: Record<AppointmentPaymentStatus, string> = {
@@ -391,8 +402,53 @@ export function AppointmentRow({ appointment: a, href }: { appointment: Appointm
           <span className="text-sm font-semibold tabular-nums">
             {a.totalKobo === 0 ? "Free" : formatKobo(a.totalKobo)}
           </span>
-          <BookingBadge status={a.bookingStatus} />
+          <BookingBadge status={a.bookingStatus} viewer={a.viewer} />
         </div>
+      </Link>
+    </li>
+  );
+}
+
+/**
+ * One job on the vet's list: who and where, what and when, the flock from
+ * the customer's farm record and the status. No distance or arrival time:
+ * the app doesn't know either.
+ */
+export function JobCard({ job, href }: { job: AppointmentSummary; href: string }) {
+  const flock = flockLabel(job.farm);
+  return (
+    <li className="rounded-3xl bg-white px-4 py-4 shadow-sm ring-1 ring-foreground/5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-[0.6875rem] text-muted-foreground">{job.reference}</p>
+          <h3 className="mt-0.5 truncate text-sm font-semibold">{job.otherParty}</h3>
+          {job.farmName && <p className="truncate text-xs text-muted-foreground">{job.farmName}</p>}
+        </div>
+        <BookingBadge status={job.bookingStatus} viewer="vet" />
+      </div>
+      <dl className="mt-3 space-y-1.5 text-xs">
+        <div className="flex items-start gap-2">
+          <dt className="sr-only">Service</dt>
+          <Icon name="stethoscope" className="size-4 shrink-0 text-primary" />
+          <dd className="min-w-0 truncate">{job.serviceName}</dd>
+        </div>
+        <div className="flex items-start gap-2">
+          <dt className="sr-only">When</dt>
+          <Icon name="calendar" className="size-4 shrink-0 text-primary" />
+          <dd>{formatSlot(job.startsAt)}</dd>
+        </div>
+        <div className="flex items-start gap-2">
+          <dt className="sr-only">Flock</dt>
+          <Icon name="egg" className="size-4 shrink-0 text-primary" />
+          <dd className={flock ? "" : "text-muted-foreground"}>{flock ?? "Flock details not linked"}</dd>
+        </div>
+      </dl>
+      <Link
+        href={href}
+        className={buttonClasses("outline", "mt-3")}
+        aria-label={`View details of ${job.reference}, ${job.serviceName} for ${job.otherParty}`}
+      >
+        View details
       </Link>
     </li>
   );

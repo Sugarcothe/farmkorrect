@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as decideRoute } from "@/app/api/admin/credentials/[userId]/route";
 import { GET as appointmentRoute, PATCH as transitionRoute } from "@/app/api/appointments/[id]/route";
 import { GET as listRoute, POST as bookRoute } from "@/app/api/appointments/route";
+import { POST as checklistRoute } from "@/app/api/appointments/[id]/visit/checklist/route";
+import { PUT as notesRoute } from "@/app/api/appointments/[id]/visit/notes/route";
 import { GET as getAvailabilityRoute, PUT as availabilityRoute } from "@/app/api/availability/route";
 import { POST as jobRoute } from "@/app/api/internal/appointments/process/route";
 import { PATCH as patchProfile } from "@/app/api/profile/route";
@@ -679,6 +681,21 @@ describe("the appointment and its status", () => {
 
     expect((await move(vet.cookie, id, "en_route", "confirmed")).status).toBe(200);
     expect((await move(vet.cookie, id, "start", "en_route")).status).toBe(200);
+    // completing needs the visit record finished first (docs/vet-job-workflow.md)
+    expect((await move(vet.cookie, id, "complete", "in_progress")).status).toBe(409);
+    for (const itemId of ["arrived", "assessment", "service", "records"]) {
+      const ticked = await callWith(checklistRoute, `/api/appointments/${id}/visit/checklist`, { id }, {
+        cookie: vet.cookie,
+        body: { itemId, done: true },
+      });
+      expect(ticked.status).toBe(200);
+    }
+    const noted = await callWith(notesRoute, `/api/appointments/${id}/visit/notes`, { id }, {
+      cookie: vet.cookie,
+      method: "PUT",
+      body: { notes: { observations: "Flock alert and feeding well." }, expectedVersion: 0 },
+    });
+    expect(noted.status).toBe(200);
     const done = await move(vet.cookie, id, "complete", "in_progress", { reason: "Vaccinated 2,000 birds." });
     expect(dataOf(done).appointment).toMatchObject({ bookingStatus: "completed", actions: [] });
     // completed is final

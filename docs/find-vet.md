@@ -157,6 +157,7 @@ requested ──accept (vet)──▶ confirmed ──en_route (vet)──▶ en
 - Accepting re-checks that the vet is still verified.
 - `respondBy` is 24 hours after booking, or the visit's start time if that comes sooner. After it passes, the request can't be accepted. It is expired when it's next read or acted on, and by the job.
 - **Holds.** `declined`, `cancelled` and `expired` delete the appointment's slot holds in the same transaction as the status change, so the time is immediately bookable again. The job also releases any holds left on a finished appointment.
+- **Completing** needs the vet's visit record finished first: required checklist items ticked and clinical observations saved. See [vet-job-workflow.md](vet-job-workflow.md) for the jobs tabs, the job offer, the visit timer, the checklist and the private notes.
 - **Tracking** means only the vet's own status updates. "On the way" is a button the vet presses. There is no live GPS, map or ETA, and the page says so.
 
 ## Notifications
@@ -171,6 +172,7 @@ A status change sets `notifySyncAt` in the same transaction (the outbox). The no
 | Cancelled | The other party |
 | Expired | Both |
 | On the way | Customer |
+| Visit started | Customer (only that it started; never the checklist or notes) |
 | Completed | Customer |
 
 ## Scheduled job

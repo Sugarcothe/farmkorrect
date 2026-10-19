@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { BackLink, ProfileAvatar, ProfileTopBar } from "@/components/profile/profile-parts";
 import { Icon } from "@/components/ui/icons";
 import { AppointmentActions } from "@/components/vets/appointment-actions";
+import { VisitTimer } from "@/components/vets/visit-timer";
+import { VisitWorkspace } from "@/components/vets/visit-workspace";
 import {
   BookingBadge,
   durationLabel,
+  flockLabel,
   Headline,
   History,
   PaymentBadge,
@@ -17,25 +20,57 @@ import { stateLabel } from "@/lib/locations/nigeria";
 import { getAppointment } from "@/lib/server/appointments";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
 import { formatSlot } from "@/lib/vets/schedule";
+import { isJobTab } from "@/lib/vets/types";
 
 export const metadata: Metadata = { title: "Appointment" };
 
 // One appointment, for its customer or its vet (anyone else gets a 404).
 // Everything shown is the stored state: "on the way" is the vet's own
 // update, and there is no live location or arrival estimate.
-export default async function AppointmentPage({ params }: { params: Promise<{ id: string }> }) {
+//
+// The vet sees it as a job offer while it's a request, and with the visit
+// timer, checklist and private clinical notes once the visit has started.
+// ?from= only picks which jobs tab the back link returns to.
+export default async function AppointmentPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { user } = await requireVerifiedPageSession();
-  const appointment = await getAppointment(user, (await params).id);
+  const now = new Date();
+  const appointment = await getAppointment(user, (await params).id, now);
   if (!appointment) notFound();
   const a = appointment;
   const asVet = a.viewer === "vet";
   const other = asVet ? a.customer : a.vet;
+  const from = (await searchParams).from;
+  const back = asVet ? (isJobTab(from) ? `/jobs?tab=${from}` : "/jobs") : "/appointments";
+  const title = !asVet
+    ? "Track appointment"
+    : a.bookingStatus === "requested"
+      ? "Job offer"
+      : a.bookingStatus === "in_progress"
+        ? "Appointment progress"
+        : "Job details";
+  const flock = flockLabel(a.farm);
+  const visitShown = asVet && (a.bookingStatus === "in_progress" || a.bookingStatus === "completed");
 
   return (
     <main className="flex flex-1 flex-col">
-      <ProfileTopBar title="Track appointment" back={<BackLink href={asVet ? "/jobs" : "/appointments"} />} />
+      <ProfileTopBar title={title} back={<BackLink href={back} />} />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
         <Headline appointment={a} />
+        {visitShown && (
+          <VisitTimer
+            startedAt={a.startedAt}
+            serverNow={now.toISOString()}
+            plannedMinutes={a.service.durationMinutes}
+            running={a.bookingStatus === "in_progress"}
+            endedAt={a.completedAt}
+          />
+        )}
         <AppointmentActions appointment={a} />
 
         <Section title="Visit">
@@ -50,7 +85,8 @@ export default async function AppointmentPage({ params }: { params: Promise<{ id
             <Fact label="Service" value={`${a.service.name} (${a.service.categoryLabel})`} />
             <Fact label="When" value={`${formatSlot(a.startsAt)}, Lagos time`} />
             <Fact label="Length" value={durationLabel(a.service.durationMinutes)} />
-            <Fact label="Status" value={<BookingBadge status={a.bookingStatus} />} />
+            {asVet && <Fact label="Flock" value={flock ?? "Not linked to a farm record"} />}
+            <Fact label="Status" value={<BookingBadge status={a.bookingStatus} viewer={a.viewer} />} />
             <Fact
               label="Phone"
               value={
@@ -67,6 +103,10 @@ export default async function AppointmentPage({ params }: { params: Promise<{ id
             />
           </dl>
         </Section>
+
+        {visitShown && a.visit && (
+          <VisitWorkspace key={`${a.bookingStatus}.${a.visit.notesVersion}`} appointment={a} visit={a.visit} />
+        )}
 
         <Section title="Farm location">
           <p className="flex items-start gap-1.5 text-sm">

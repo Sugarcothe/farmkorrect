@@ -55,6 +55,8 @@ export const LIMITS = {
   availabilityChangesPerUser: { limit: 60, windowMs: 60 * 60_000 },
   appointmentCreatesPerUser: { limit: 20, windowMs: 60 * 60_000 },
   appointmentActionsPerUser: { limit: 120, windowMs: 60 * 60_000 },
+  // checklist ticks and note saves during visits: generous, but bounded
+  appointmentVisitWritesPerUser: { limit: 600, windowMs: 60 * 60_000 },
   appointmentReadsPerUser: { limit: 300, windowMs: 15 * 60_000 },
   // Other Services (docs/other-services.md)
   serviceSearchesPerUser: { limit: 300, windowMs: 15 * 60_000 },
