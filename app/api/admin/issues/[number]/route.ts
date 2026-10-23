@@ -1,5 +1,5 @@
 import type { IssueCaseResponse } from "@/lib/admin/types";
-import { ADMIN_NOT_FOUND, requireAdminRequest } from "@/lib/server/admin";
+import { ADMIN_NOT_FOUND, requireAdminCapability } from "@/lib/server/admin";
 import { closeIssueAsAdmin, getIssueCase, parseCloseIssue } from "@/lib/server/admin-queues";
 import { HttpError, ok, readJsonBody, route } from "@/lib/server/http";
 import { limitUser } from "@/lib/server/order-access";
@@ -11,7 +11,7 @@ import { limitUser } from "@/lib/server/order-access";
 type Context = { params: Promise<{ number: string }> };
 
 export const GET = route<Context>("admin/issues", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request);
+  const { user } = await requireAdminCapability(request, "admin.order_issues.read");
   await limitUser("adminReadsPerUser", user._id);
   const found = await getIssueCase((await params).number);
   if (!found) throw new HttpError(404, ADMIN_NOT_FOUND);
@@ -19,7 +19,7 @@ export const GET = route<Context>("admin/issues", async (request, { params }) =>
 });
 
 export const POST = route<Context>("admin/issues", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request, { mutation: true });
+  const { user } = await requireAdminCapability(request, "admin.order_issues.resolve", { mutation: true });
   await limitUser("adminActionsPerUser", user._id);
   const note = parseCloseIssue(await readJsonBody(request));
   const { number } = await params;

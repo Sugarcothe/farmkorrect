@@ -108,6 +108,11 @@ export const NOTIFICATION_TYPES = {
   review_approved: { category: "reviews", icon: "check-circle", channels: [] },
   review_removed: { category: "reviews", icon: "alert-circle", channels: [] },
   credential_verified: { category: "reviews", icon: "check-circle", channels: [] },
+  // an admin suspended or reactivated the account (docs/admin-operations-v2.md). A
+  // suspended account can't sign in to read its inbox, so this one goes out by
+  // email and SMS (no push: its devices are signed out)
+  account_suspended: { category: "security", icon: "lock", channels: ["email", "sms"] },
+  account_reactivated: { category: "security", icon: "check-circle", channels: ["email", "sms"] },
   credential_rejected: { category: "reviews", icon: "alert-circle", channels: [] },
   // vet appointments (customer and vet)
   appointment_requested: { category: "appointments", icon: "list", channels: ["email", "sms", "push"] },

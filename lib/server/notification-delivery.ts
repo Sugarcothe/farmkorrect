@@ -5,7 +5,7 @@ import { MANDATORY_CATEGORIES } from "@/lib/notifications/types";
 import { getAuthConfig, getResendConfig, getTermiiConfig, getWebPushConfig } from "./config";
 import { sendEmail } from "./email/resend";
 import type { NotificationDeliveryDoc, NotificationDoc, PushSubscriptionDoc, UserDoc } from "./models";
-import { channelAllowed, getPreferences, notificationCollections, sweepNotificationSync } from "./notifications";
+import { channelAllowed, getPreferences, mayReceive, notificationCollections, sweepNotificationSync } from "./notifications";
 import { sendSms, type DeliveryResult } from "./sms/termii";
 
 // Sends the outbox: email, SMS and push deliveries created with each
@@ -169,7 +169,7 @@ async function deliver(delivery: NotificationDeliveryDoc, now: Date): Promise<Ou
     { _id: delivery.recipientUserId },
     { projection: { _id: 1, status: 1, emailNormalized: 1, phoneNormalized: 1, emailVerifiedAt: 1, phoneVerifiedAt: 1 } },
   );
-  if (!user || user.status !== "active") return { state: "skipped", reason: "inactive" };
+  if (!user || !mayReceive(user.status, notification.type)) return { state: "skipped", reason: "inactive" };
   const prefs = await getPreferences(user._id);
   if (!channelAllowed(prefs, notification.category, delivery.channel)) return { state: "skipped", reason: "channel_disabled" };
 

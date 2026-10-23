@@ -5,7 +5,7 @@ import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { CourseOverview } from "@/components/training/course-overview";
 import { buttonClasses } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { buildCourseDetail } from "@/lib/server/training";
 import { findCourseForAdmin } from "@/lib/server/training-admin";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Course preview" };
 // What learners will see on the course page, for any course including
 // drafts. Admins only; nothing is enrolled or recorded.
 export default async function CoursePreviewPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.training.manage");
   const doc = await findCourseForAdmin((await params).id);
   if (!doc) notFound();
   const course = buildCourseDetail(doc, new Set(), null);

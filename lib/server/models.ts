@@ -2,6 +2,8 @@ import type { ObjectId } from "mongodb";
 import type { FarmType, Role } from "@/lib/auth/types";
 import type { PayoutAccountStatus } from "@/lib/bank-details/types";
 import type { AdminAction, AuditTargetType } from "@/lib/admin/types";
+import type { CasePriority, CaseStatus, CaseType, ResolutionCode } from "@/lib/admin/cases";
+import type { AdminRole } from "@/lib/admin/permissions";
 import type { NigerianState } from "@/lib/locations/nigeria";
 import type {
   FulfillmentMethod,
@@ -71,6 +73,8 @@ export const COLLECTIONS = {
   notificationPreferences: "notification_preferences",
   pushSubscriptions: "push_subscriptions",
   adminAudit: "admin_audit",
+  adminMemberships: "admin_memberships",
+  adminCases: "admin_cases",
   promotions: "promotions",
   promotionRedemptions: "promotion_redemptions",
   vetAvailability: "vet_availability",
@@ -87,7 +91,14 @@ export const COLLECTIONS = {
   serviceRefunds: "service_refunds",
 } as const;
 
-export type UserStatus = "pending_verification" | "active";
+/**
+ * pending_verification: registered, phone not yet verified.
+ * active: verified and able to sign in.
+ * suspended: an admin blocked the account (docs/admin-operations-v2.md). It
+ * can't sign in, its sessions were revoked, and it drops out of directories,
+ * bookings and notifications. History stays as it was.
+ */
+export type UserStatus = "pending_verification" | "active" | "suspended";
 
 export type UserDoc = {
   _id: ObjectId;
@@ -107,12 +118,28 @@ export type UserDoc = {
   /** set the first time the user edits their profile; absent until then */
   profile?: UserProfileDoc;
   /**
-   * Set with a credential decision that notifies the user; cleared once the
+   * Set with a credential decision or an account suspension or reactivation
+   * that notifies the user; cleared once the
    * notification exists (the notification job retries it). Absent otherwise.
    */
   notifySyncAt?: Date | null;
+  /** the latest suspension or reactivation; history lives in admin_audit */
+  suspension?: AccountSuspensionDoc;
+  /** bumped by each suspend or reactivate, so a stale admin screen can't undo a newer decision */
+  statusVersion?: number;
   createdAt: Date;
   updatedAt: Date;
+};
+
+/**
+ * The latest suspension or reactivation. The owner is notified through
+ * notifySyncAt (set in the same write); the admin's reason stays in
+ * admin_audit and is never sent to them.
+ */
+export type AccountSuspensionDoc = {
+  state: "suspended" | "reactivated";
+  by: ObjectId;
+  at: Date;
 };
 
 /**
@@ -838,6 +865,54 @@ export type AdminAuditDoc = {
   from: string | null;
   to: string | null;
   at: Date;
+};
+
+/**
+ * An admin role granted in the app (docs/admin-operations-v2.md). Root admins
+ * come from ADMIN_USER_IDS and never have a document here. A revoked
+ * membership is kept; granting again creates a new document, so the history
+ * of who had what stays intact. At most one active membership per user.
+ */
+export type AdminMembershipDoc = {
+  _id: ObjectId;
+  userId: ObjectId;
+  role: AdminRole;
+  status: "active" | "revoked";
+  grantedBy: ObjectId;
+  grantedAt: Date;
+  updatedBy: ObjectId;
+  updatedAt: Date;
+  revokedBy: ObjectId | null;
+  revokedAt: Date | null;
+  /** bumped by every change; changes name the version they were made against */
+  version: number;
+};
+
+/**
+ * An operational case. It records an investigation and never changes its
+ * source. `sourceKey` is set only while the case is open, so a unique partial
+ * index allows one open case per source.
+ */
+export type AdminCaseDoc = {
+  _id: ObjectId;
+  /** FKC-XXXXXXXX */
+  reference: string;
+  type: CaseType;
+  source: { type: CaseType; id: string };
+  /** `${type}:${id}` while open; removed when closed */
+  sourceKey?: string;
+  title: string;
+  priority: CasePriority;
+  priorityRank: number;
+  status: CaseStatus;
+  open: boolean;
+  assigneeUserId: ObjectId | null;
+  notes: Array<{ id: string; authorUserId: ObjectId; body: string; at: Date }>;
+  resolution: { code: ResolutionCode; note: string; by: ObjectId; at: Date } | null;
+  createdBy: ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+  version: number;
 };
 
 // --- promotions ----------------------------------------------------------------------

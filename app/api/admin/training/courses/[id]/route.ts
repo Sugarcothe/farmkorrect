@@ -1,4 +1,4 @@
-import { requireAdminRequest } from "@/lib/server/admin";
+import { requireAdminCapability } from "@/lib/server/admin";
 import { HttpError, ok, readJsonBody, route } from "@/lib/server/http";
 import { limitUser } from "@/lib/server/order-access";
 import {
@@ -16,7 +16,7 @@ import type { AdminCourseResponse } from "@/lib/training/types";
 type Context = { params: Promise<{ id: string }> };
 
 export const GET = route<Context>("admin/training/course", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request);
+  const { user } = await requireAdminCapability(request, "admin.training.manage");
   await limitUser("adminReadsPerUser", user._id);
   const course = await findCourseForAdmin((await params).id);
   if (!course) throw new HttpError(404, ADMIN_COURSE_NOT_FOUND);
@@ -24,7 +24,7 @@ export const GET = route<Context>("admin/training/course", async (request, { par
 });
 
 export const PUT = route<Context>("admin/training/course", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request, { mutation: true });
+  const { user } = await requireAdminCapability(request, "admin.training.manage", { mutation: true });
   await limitUser("adminActionsPerUser", user._id);
   const body = await readJsonBody(request, MAX_COURSE_BYTES);
   return ok<AdminCourseResponse>({ course: await updateCourse(user, (await params).id, body) });

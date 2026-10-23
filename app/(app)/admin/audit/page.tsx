@@ -6,7 +6,7 @@ import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { buttonClasses } from "@/components/ui/button";
 import { EmptyList, first, Pager } from "@/components/wallet/wallet-parts";
 import { ADMIN_ACTION_LABELS, ADMIN_ACTIONS, AUDIT_TARGET_TYPES } from "@/lib/admin/types";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listAudit, parseAuditFilters, type AuditFilters } from "@/lib/server/admin-audit";
 import { HttpError } from "@/lib/server/http";
 
@@ -24,7 +24,7 @@ export default async function AuditPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.audit.read");
   const query = await searchParams;
   const raw = Object.fromEntries(FILTER_KEYS.map((key) => [key, first(query[key])?.trim() || null])) as Record<
     (typeof FILTER_KEYS)[number],

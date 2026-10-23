@@ -5,7 +5,7 @@ import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { buttonClasses } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icons";
 import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listCoursesForAdmin } from "@/lib/server/training-admin";
 import { categoryLabel, difficultyLabel } from "@/lib/training/types";
 
@@ -18,7 +18,7 @@ export default async function AdminTrainingPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.training.manage");
   const page = pageParam(first((await searchParams).page));
   const { courses, hasMore } = await listCoursesForAdmin(page);
 

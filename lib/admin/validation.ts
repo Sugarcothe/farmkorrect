@@ -18,3 +18,7 @@ export function validateAdminReason(value: string) {
 export function validateResolutionNote(value: string) {
   return validateText(value, ADMIN_TEXT_LIMITS.resolutionNote, "Write an internal note on how this was resolved.");
 }
+
+export function validateLimitedText(value: string, limits: { min: number; max: number }, empty: string) {
+  return validateText(value, limits, empty);
+}

@@ -1,5 +1,5 @@
 import type { CredentialCaseResponse } from "@/lib/admin/types";
-import { ADMIN_NOT_FOUND, requireAdminRequest } from "@/lib/server/admin";
+import { ADMIN_NOT_FOUND, requireAdminCapability } from "@/lib/server/admin";
 import { decideCredential, getCredentialCase, parseCredentialDecision } from "@/lib/server/admin-credentials";
 import { HttpError, ok, readJsonBody, route } from "@/lib/server/http";
 import { limitUser } from "@/lib/server/order-access";
@@ -11,7 +11,7 @@ import { limitUser } from "@/lib/server/order-access";
 type Context = { params: Promise<{ userId: string }> };
 
 export const GET = route<Context>("admin/credentials", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request);
+  const { user } = await requireAdminCapability(request, "admin.credentials.review");
   await limitUser("adminReadsPerUser", user._id);
   const found = await getCredentialCase((await params).userId);
   if (!found) throw new HttpError(404, ADMIN_NOT_FOUND);
@@ -19,7 +19,7 @@ export const GET = route<Context>("admin/credentials", async (request, { params 
 });
 
 export const POST = route<Context>("admin/credentials", async (request, { params }) => {
-  const { user } = await requireAdminRequest(request, { mutation: true });
+  const { user } = await requireAdminCapability(request, "admin.credentials.review", { mutation: true });
   await limitUser("adminActionsPerUser", user._id);
   const input = parseCredentialDecision(await readJsonBody(request));
   const { userId } = await params;

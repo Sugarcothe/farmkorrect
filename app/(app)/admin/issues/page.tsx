@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AdminTabs, CaseLink, pageHref, pageParam, Pill } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listIssues } from "@/lib/server/admin-queues";
 import { formatKobo } from "@/lib/wallet/money";
 
@@ -15,7 +15,7 @@ export default async function IssuesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.order_issues.read");
   const query = await searchParams;
   const state = first(query.state) === "closed" ? "closed" : "open";
   const page = pageParam(first(query.page));

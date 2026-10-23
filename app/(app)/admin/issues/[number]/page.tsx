@@ -4,7 +4,7 @@ import { AuditList, Facts, humanize, Pill } from "@/components/admin/admin-parts
 import { CloseIssueForm } from "@/components/admin/close-issue-form";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { formatDate } from "@/components/wallet/wallet-parts";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { getIssueCase } from "@/lib/server/admin-queues";
 import { formatKobo } from "@/lib/wallet/money";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Order issue" };
 // the close form while it's open, and its history. Nothing here refunds,
 // pays or moves money; closing only releases the seller's held earning.
 export default async function IssuePage({ params }: { params: Promise<{ number: string }> }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.order_issues.read");
   const found = await getIssueCase((await params).number);
   if (!found) notFound();
   const { case: c, history } = found;

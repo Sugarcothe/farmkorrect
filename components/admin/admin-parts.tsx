@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/ui/icons";
 import { formatDate } from "@/components/wallet/wallet-parts";
+import type { CasePriority } from "@/lib/admin/cases";
 import { ADMIN_ACTION_LABELS, type AuditEntry } from "@/lib/admin/types";
 
 // Building blocks shared by the admin pages. They only render what the
@@ -64,6 +65,13 @@ export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone
     <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold ${tones[tone]}`}>{children}</span>
   );
 }
+
+export const PRIORITY_TONE: Record<CasePriority, "bad" | "waiting" | "neutral"> = {
+  urgent: "bad",
+  high: "waiting",
+  normal: "neutral",
+  low: "neutral",
+};
 
 /** "partially_refunded" → "Partially refunded". */
 export const humanize = (value: string) => {
