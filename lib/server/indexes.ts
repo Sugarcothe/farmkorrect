@@ -21,6 +21,12 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { notifySyncAt: 1 }, name: "notify_sync", partialFilterExpression: { notifySyncAt: { $type: "date" } } },
     // admin analytics: registrations in a period
     { key: { createdAt: 1 }, name: "created" },
+    // admin: the suspended accounts list, most recent first
+    {
+      key: { "suspension.at": -1, _id: -1 },
+      name: "suspended_recent",
+      partialFilterExpression: { status: "suspended" },
+    },
   ],
   [COLLECTIONS.sessions]: [
     { key: { tokenHash: 1 }, name: "token_unique", unique: true },
@@ -277,6 +283,25 @@ const INDEXES: Record<string, IndexDescription[]> = {
     { key: { action: 1, at: -1, _id: -1 }, name: "action_recent" },
     { key: { "target.type": 1, "target.id": 1, at: -1, _id: -1 }, name: "target_recent" },
     { key: { actorUserId: 1, at: -1, _id: -1 }, name: "actor_recent" },
+  ],
+  // docs/admin-operations-v2.md
+  [COLLECTIONS.adminMemberships]: [
+    // at most one active role per account; revoked ones are kept as history
+    { key: { userId: 1 }, name: "user_active_unique", unique: true, partialFilterExpression: { status: "active" } },
+    { key: { status: 1, grantedAt: -1, _id: -1 }, name: "status_recent" },
+    { key: { userId: 1, grantedAt: -1 }, name: "user_history" },
+  ],
+  [COLLECTIONS.adminCases]: [
+    { key: { reference: 1 }, name: "reference_unique", unique: true },
+    // one open case per source record (sourceKey only exists while open)
+    { key: { sourceKey: 1 }, name: "open_source_unique", unique: true, partialFilterExpression: { sourceKey: { $type: "string" } } },
+    // the case queue: open or closed, filtered by type, most urgent then oldest first
+    { key: { open: 1, priorityRank: -1, createdAt: 1, _id: 1 }, name: "queue" },
+    { key: { open: 1, type: 1, priorityRank: -1, createdAt: 1, _id: 1 }, name: "type_queue" },
+    { key: { open: 1, assigneeUserId: 1, priorityRank: -1, createdAt: 1, _id: 1 }, name: "assignee_queue" },
+    { key: { open: 1, status: 1, priorityRank: -1, createdAt: 1, _id: 1 }, name: "status_queue" },
+    // every case about one source, for its history
+    { key: { "source.type": 1, "source.id": 1, createdAt: -1 }, name: "source" },
   ],
   [COLLECTIONS.promotions]: [
     // a coupon code belongs to one promotion, whatever its status

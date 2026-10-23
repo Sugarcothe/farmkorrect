@@ -769,6 +769,9 @@ describe("audit trail and exceptions", () => {
         accountNumberLast4: "6789",
         failureReason: "provider_reversed",
         updatedAt: now.toISOString(),
+        category: "late_provider_event",
+        outcome: "failed",
+        openCase: null,
       },
     ]);
     const text = JSON.stringify(res.json);
@@ -821,6 +824,7 @@ describe("audit trail and exceptions", () => {
         lastFailure: "http_503",
         notificationType: notification!.type,
         updatedAt: now.toISOString(),
+        openCase: null,
       },
     ]);
     expect(JSON.stringify(failed.json)).not.toContain("provider-message-secret");

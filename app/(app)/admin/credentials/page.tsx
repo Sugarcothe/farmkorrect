@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { CaseLink, pageHref, pageParam } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listPendingCredentials } from "@/lib/server/admin-credentials";
 
 export const metadata: Metadata = { title: "Credentials" };
@@ -15,7 +15,7 @@ export default async function CredentialsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.credentials.review");
   const page = pageParam(first((await searchParams).page));
   const { cases, hasMore } = await listPendingCredentials(page);
 

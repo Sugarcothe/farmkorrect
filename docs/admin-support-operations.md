@@ -9,7 +9,9 @@ This page covers Milestone 10, a small internal area at `/admin` where trusted s
 
 Every decision is written to an append-only audit trail.
 
-It is deliberately minimal. There is no ticket system, no staff invitations, no impersonation, no public admin sign-up and no permission framework: an admin can do everything listed here.
+It is deliberately minimal. There are no staff invitations, no impersonation and no public admin sign-up.
+
+> **V2 update.** Admin roles, account suspension and the case centre are described in [admin-operations-v2.md](admin-operations-v2.md). Admins in `ADMIN_USER_IDS` below are now *root Super Admins*. Super Admins can grant narrower roles (Support Agent, Trust & Safety, Finance Ops, Content Manager) at `/admin/team`, and each page and API below now requires a specific capability. Where this page says "an admin", read "an admin whose role allows it".
 
 ## Who is an admin
 
@@ -50,7 +52,10 @@ Remove their id from `ADMIN_USER_IDS` and redeploy or restart. Access ends on th
 | `/admin/issues/[number]` | `GET`, `POST /api/admin/issues/[number]` | One issue with its history; close it |
 | `/admin/reviews` | `GET /api/admin/reviews?status=pending\|published\|rejected` | Reviews by status |
 | — | `POST /api/admin/reviews/[id]` | Publish, reject, remove or restore a review |
-| `/admin/exceptions` | `GET /api/admin/exceptions?kind=orders\|payouts\|deliveries` | Read-only operational exceptions |
+| `/admin/exceptions` | `GET /api/admin/exceptions?kind=orders\|bookings\|payouts\|deliveries` | Read-only operational exceptions |
+| `/admin/team` | `GET`, `POST /api/admin/team`, `POST /api/admin/team/lookup`, `GET`, `POST /api/admin/team/[userId]` | Admin roles (V2) |
+| `/admin/users` | `GET /api/admin/users`, `POST /api/admin/users/lookup`, `GET /api/admin/users/[id]`, `POST /api/admin/users/[id]/status` | Account lookup, suspend and reactivate (V2) |
+| `/admin/cases` | `GET`, `POST /api/admin/cases`, `GET`, `POST /api/admin/cases/[reference]` | Case centre (V2) |
 | `/admin/audit` | `GET /api/admin/audit?action=&targetType=&targetId=&actor=&page=` | The audit trail, newest first |
 
 - **Pagination.** Lists show 20 per page (`?page=`).
@@ -116,6 +121,7 @@ Reviews are published as soon as they are written. Moderation can move them betw
 `/admin/exceptions` lists problems that need a person to investigate. **There are no action buttons**: nothing there retries, refunds, pays out or changes the ledger.
 
 - **Orders** flagged during payment checks (`reviewIssue`, for example an amount or reference mismatch). Shows the order number, total, statuses and the flag text. Buyer contact details and delivery notes are not shown.
+- **Service bookings** (V2) flagged with an exception, with the latest refund record's status.
 - **Payouts** flagged with an `issue`. Shows the reference, amount, status, failure reason, bank name and **only the last four digits** of the account. Recipient codes, transfer codes, raw provider statuses and responses are never shown.
 - **Deliveries.** Notification deliveries (email, SMS, push) that failed or exhausted their retries. Shows the channel, attempts and a short failure code, not message contents or provider ids.
 
@@ -162,4 +168,4 @@ The new types are in-app only. Admin actions don't promise email or SMS. Those c
 - New admin decisions notify in-app only.
 - If recalculating a rating fails after a moderation move, someone has to run `npm run db:rebuild-search`. There is no automatic retry.
 - No audit retention policy or export yet.
-- All admins have the same powers. There are no roles or scopes.
+- ~~All admins have the same powers.~~ Roles and capabilities arrived in V2 ([admin-operations-v2.md](admin-operations-v2.md)).

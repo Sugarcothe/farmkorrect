@@ -17,7 +17,7 @@ import { first, formatDate } from "@/components/wallet/wallet-parts";
 import { PERIOD_LABELS, resolveRange } from "@/lib/analytics/range";
 import { CSV_ROW_LIMIT, type AdminReport } from "@/lib/analytics/types";
 import { ROLE_LABELS, type Role } from "@/lib/auth/types";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { getAdminReport } from "@/lib/server/analytics";
 import { formatKobo } from "@/lib/wallet/money";
 
@@ -37,7 +37,7 @@ export default async function AdminAnalyticsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPage();
+  await requireAdminCapabilityPage("admin.analytics.read");
   const params = await searchParams;
   const input = { period: first(params.period), from: first(params.from), to: first(params.to) };
   const resolved = resolveRange(input);

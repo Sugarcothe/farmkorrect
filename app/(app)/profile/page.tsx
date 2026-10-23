@@ -13,7 +13,7 @@ import {
 import { Icon, type IconName } from "@/components/ui/icons";
 import { FARM_TYPE_LABELS } from "@/lib/auth/types";
 import { PROFILE_CONFIG, SECTION_INFO, specializationLabel } from "@/lib/profile/config";
-import { isAdmin } from "@/lib/server/admin";
+import { isAdminPage } from "@/lib/server/admin";
 import { requireVerifiedPageSession } from "@/lib/server/auth";
 import { SELLER_ROLE } from "@/lib/server/products";
 import { getProfile } from "@/lib/server/profile";
@@ -27,8 +27,8 @@ export default async function ProfilePage({
 }) {
   const session = await requireVerifiedPageSession();
   const { user } = session;
-  // decided on the server from ADMIN_USER_IDS; nothing in the browser can switch it on
-  const showAdmin = isAdmin(session);
+  // decided on the server (ADMIN_USER_IDS or an active admin membership); nothing in the browser can switch it on
+  const showAdmin = await isAdminPage();
   const profile = await getProfile(user);
   const config = PROFILE_CONFIG[profile.role];
   const justSaved = (await searchParams).updated === "1";

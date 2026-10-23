@@ -5,7 +5,7 @@ import { CredentialDecisionForm } from "@/components/admin/credential-decision";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { formatDate } from "@/components/wallet/wallet-parts";
 import type { CredentialCase } from "@/lib/admin/types";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { getCredentialCase } from "@/lib/server/admin-credentials";
 
 export const metadata: Metadata = { title: "Credential" };
@@ -22,7 +22,7 @@ const STATUS: Record<CredentialCase["status"], { label: string; tone: "neutral" 
 // One professional's submitted credential, the decision form while it's
 // pending, and every decision ever recorded for it.
 export default async function CredentialPage({ params }: { params: Promise<{ userId: string }> }) {
-  const { user } = await requireAdminPage();
+  const { user } = await requireAdminCapabilityPage("admin.credentials.review");
   const { userId } = await params;
   const found = await getCredentialCase(userId);
   if (!found) notFound();

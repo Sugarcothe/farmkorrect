@@ -11,8 +11,12 @@ import {
 } from "@/lib/admin/types";
 import { validateResolutionNote } from "@/lib/admin/validation";
 import { cleanText } from "@/lib/profile/validation";
-import { auditFor, listAudit } from "./admin-audit";
+import type { AdminAccess } from "./admin";
+import { countSuspendedAccounts } from "./admin-accounts";
+import { auditFor, countAuditActions, listAudit } from "./admin-audit";
+import { countCases, openCaseLinks } from "./admin-cases";
 import { countPendingCredentials } from "./admin-credentials";
+import { bookingOutcome, issueCategory, orderOutcome, payoutOutcome, sanitizeIssue } from "./admin-flags";
 import { countPendingReviews } from "./admin-reviews";
 import { getDb } from "./db";
 import { HttpError } from "./http";
@@ -23,6 +27,8 @@ import {
   type NotificationDoc,
   type OrderDoc,
   type PayoutDoc,
+  type ServiceBookingDoc,
+  type ServiceRefundDoc,
   type UserDoc,
 } from "./models";
 import { closeIssue } from "./orders";
@@ -40,6 +46,8 @@ async function collections() {
   return {
     orders: db.collection<OrderDoc>(COLLECTIONS.orders),
     payouts: db.collection<PayoutDoc>(COLLECTIONS.payouts),
+    bookings: db.collection<ServiceBookingDoc>(COLLECTIONS.serviceBookings),
+    refunds: db.collection<ServiceRefundDoc>(COLLECTIONS.serviceRefunds),
     deliveries: db.collection<NotificationDeliveryDoc>(COLLECTIONS.notificationDeliveries),
     notifications: db.collection<NotificationDoc>(COLLECTIONS.notifications),
     fulfillments: db.collection<FulfillmentDoc>(COLLECTIONS.fulfillments),
@@ -50,31 +58,59 @@ export const OPEN_ISSUE: Filter<OrderDoc> = { "issue.reportedAt": { $type: "date
 const CLOSED_ISSUE: Filter<OrderDoc> = { "issue.reportedAt": { $type: "date" }, "issue.closedAt": { $type: "date" } };
 export const FLAGGED_ORDER: Filter<OrderDoc> = { reviewIssue: { $type: "string" } };
 export const FLAGGED_PAYOUT: Filter<PayoutDoc> = { issue: { $type: "string" } };
+export const FLAGGED_BOOKING: Filter<ServiceBookingDoc> = { reviewIssue: { $type: "string" } };
 export const FAILED_DELIVERY: Filter<NotificationDeliveryDoc> = { state: { $in: ["failed", "exhausted"] } };
 
 const clip = (text: string, max = 300) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-export async function getAdminSummary(): Promise<AdminSummary> {
-  const { orders, payouts, deliveries } = await collections();
-  const [pendingCredentials, openIssues, reviewsToModerate, flaggedOrders, flaggedPayouts, failedDeliveries, recent] =
-    await Promise.all([
-      countPendingCredentials(),
-      orders.countDocuments(OPEN_ISSUE),
-      countPendingReviews(),
-      orders.countDocuments(FLAGGED_ORDER),
-      payouts.countDocuments(FLAGGED_PAYOUT),
-      deliveries.countDocuments(FAILED_DELIVERY),
-      listAudit({ action: null, targetType: null, targetId: null, actorUserId: null }, 1, 5),
-    ]);
-  return {
-    pendingCredentials,
-    openIssues,
-    reviewsToModerate,
-    flaggedOrders,
-    flaggedPayouts,
-    failedDeliveries,
-    recentActions: recent.entries,
+const WEEK_MS = 7 * 24 * 60 * 60_000;
+
+/**
+ * The dashboard counts this admin's role covers. Each count is read on its
+ * own: one that fails comes back null (shown as an error), never as 0, and
+ * the others still load.
+ */
+export async function getAdminSummary(access: AdminAccess): Promise<AdminSummary> {
+  const { orders, payouts, bookings, deliveries } = await collections();
+  const jobs: Array<[keyof AdminSummary, () => Promise<unknown>]> = [];
+  const add = (key: keyof AdminSummary, allowed: boolean, read: () => Promise<unknown>) => {
+    if (allowed) jobs.push([key, read]);
   };
+  add("pendingCredentials", access.can("admin.credentials.review"), countPendingCredentials);
+  add("openIssues", access.can("admin.order_issues.read"), () => orders.countDocuments(OPEN_ISSUE));
+  add("reviewsToModerate", access.can("admin.reviews.moderate"), countPendingReviews);
+  const exceptions = access.can("admin.exceptions.read");
+  add("flaggedOrders", exceptions, () => orders.countDocuments(FLAGGED_ORDER));
+  add("flaggedPayouts", exceptions, () => payouts.countDocuments(FLAGGED_PAYOUT));
+  add("flaggedBookings", exceptions, () => bookings.countDocuments(FLAGGED_BOOKING));
+  add("failedDeliveries", access.can("admin.deliveries.read"), () => deliveries.countDocuments(FAILED_DELIVERY));
+  if (access.can("admin.cases.read")) {
+    // one read for the three case counts
+    const counts = countCases(access);
+    counts.catch(() => undefined);
+    add("openCases", true, async () => (await counts).open);
+    add("urgentCases", true, async () => (await counts).urgent);
+    add("unassignedCases", true, async () => (await counts).unassigned);
+  }
+  add("suspendedAccounts", access.can("admin.users.read"), countSuspendedAccounts);
+  add("recentAccountActions", access.can("admin.users.read"), () =>
+    countAuditActions(["user.suspend", "user.reactivate"], new Date(Date.now() - WEEK_MS)),
+  );
+  add("recentActions", access.can("admin.audit.read"), async () =>
+    (await listAudit({ action: null, targetType: null, targetId: null, actorUserId: null }, 1, 5)).entries,
+  );
+
+  const results = await Promise.allSettled(jobs.map(([, read]) => read()));
+  const summary: Record<string, unknown> = {};
+  results.forEach((result, i) => {
+    const key = jobs[i][0];
+    if (result.status === "fulfilled") summary[key] = result.value;
+    else {
+      summary[key] = null;
+      console.error(`[admin] summary count ${key} failed`, (result.reason as Error)?.name ?? "error");
+    }
+  });
+  return summary as AdminSummary;
 }
 
 // --- order issues -------------------------------------------------------------------
@@ -183,29 +219,97 @@ export async function closeIssueAsAdmin(admin: UserDoc, number: string, note: st
 
 // --- operational exceptions (read only) ------------------------------------------------
 
+// Every list is read only: there is no retry, refund, payout or ledger
+// action anywhere in the exceptions view. The reason text is sanitized,
+// expected and observed amounts are kept apart (an observed amount that was
+// never recorded is null, not 0), and each row links to its open case.
+
+const recorded = (kobo: number) => (kobo > 0 ? kobo : null);
+
 export async function listExceptions(kind: ExceptionKind, page: number, pageSize = ADMIN_PAGE_SIZE): Promise<ExceptionPage> {
-  const { orders, payouts, deliveries, notifications } = await collections();
+  const { orders, payouts, bookings, refunds, deliveries, notifications } = await collections();
   const skip = (page - 1) * pageSize;
   if (kind === "orders") {
     const docs = await orders
       .find(FLAGGED_ORDER, {
-        projection: { number: 1, reviewIssue: 1, paymentStatus: 1, fulfillmentStatus: 1, totalKobo: 1, updatedAt: 1 },
+        projection: { number: 1, reviewIssue: 1, paymentStatus: 1, fulfillmentStatus: 1, totalKobo: 1, paidKobo: 1, updatedAt: 1 },
       })
       .sort({ updatedAt: -1, _id: -1 })
       .skip(skip)
       .limit(pageSize + 1)
       .toArray();
+    const shown = docs.slice(0, pageSize);
+    const links = await openCaseLinks("order_payment", shown.map((o) => o.number));
     return {
       kind,
       page,
       hasMore: docs.length > pageSize,
-      items: docs.slice(0, pageSize).map((o) => ({
+      items: shown.map((o) => ({
         orderNumber: o.number,
-        issue: clip(o.reviewIssue ?? ""),
+        issue: sanitizeIssue(o.reviewIssue),
+        category: issueCategory(o.reviewIssue),
         paymentStatus: o.paymentStatus,
+        outcome: orderOutcome(o.paymentStatus),
         fulfillmentStatus: o.fulfillmentStatus,
         totalKobo: o.totalKobo,
+        paidKobo: recorded(o.paidKobo ?? 0),
         updatedAt: o.updatedAt.toISOString(),
+        openCase: links.get(o.number) ?? null,
+      })),
+    };
+  }
+  if (kind === "bookings") {
+    // no contact details, addresses, notes or payment references
+    const docs = await bookings
+      .find(FLAGGED_BOOKING, {
+        projection: {
+          reference: 1,
+          status: 1,
+          paymentStatus: 1,
+          reviewIssue: 1,
+          amountKobo: 1,
+          paidKobo: 1,
+          refundedKobo: 1,
+          paidAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      })
+      .sort({ updatedAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(pageSize + 1)
+      .toArray();
+    const shown = docs.slice(0, pageSize);
+    const [links, refundList] = await Promise.all([
+      openCaseLinks("service_booking", shown.map((b) => b.reference)),
+      shown.length
+        ? refunds
+            .find({ bookingId: { $in: shown.map((b) => b._id) } }, { projection: { bookingId: 1, status: 1, createdAt: 1 } })
+            .sort({ createdAt: 1 })
+            .toArray()
+        : Promise.resolve([]),
+    ]);
+    // the latest refund attempt per booking
+    const refundStatus = new Map(refundList.map((r) => [r.bookingId.toHexString(), r.status as string]));
+    return {
+      kind,
+      page,
+      hasMore: docs.length > pageSize,
+      items: shown.map((b) => ({
+        reference: b.reference,
+        status: b.status,
+        paymentStatus: b.paymentStatus,
+        outcome: bookingOutcome(b.paymentStatus),
+        category: issueCategory(b.reviewIssue),
+        issue: sanitizeIssue(b.reviewIssue),
+        expectedKobo: b.amountKobo ?? 0,
+        paidKobo: recorded(b.paidKobo ?? 0),
+        refundedKobo: b.refundedKobo ?? 0,
+        refundStatus: refundStatus.get(b._id.toHexString()) ?? null,
+        paidAt: b.paidAt?.toISOString() ?? null,
+        createdAt: b.createdAt.toISOString(),
+        updatedAt: b.updatedAt.toISOString(),
+        openCase: links.get(b.reference) ?? null,
       })),
     };
   }
@@ -217,6 +321,7 @@ export async function listExceptions(kind: ExceptionKind, page: number, pageSize
           reference: 1,
           issue: 1,
           status: 1,
+          providerStatus: 1,
           amountKobo: 1,
           bankName: 1,
           accountNumberLast4: 1,
@@ -228,19 +333,24 @@ export async function listExceptions(kind: ExceptionKind, page: number, pageSize
       .skip(skip)
       .limit(pageSize + 1)
       .toArray();
+    const shown = docs.slice(0, pageSize);
+    const links = await openCaseLinks("payout", shown.map((p) => p.reference));
     return {
       kind,
       page,
       hasMore: docs.length > pageSize,
-      items: docs.slice(0, pageSize).map((p) => ({
+      items: shown.map((p) => ({
         reference: p.reference,
-        issue: clip(p.issue ?? ""),
+        issue: sanitizeIssue(p.issue),
+        category: issueCategory(p.issue),
         status: p.status,
+        outcome: payoutOutcome(p.status, p.providerStatus ?? null),
         amountKobo: p.amountKobo,
         bankName: p.bankName,
         accountNumberLast4: String(p.accountNumberLast4 ?? "").slice(-4),
-        failureReason: p.failureReason,
+        failureReason: p.failureReason ? sanitizeIssue(p.failureReason, 120) : null,
         updatedAt: p.updatedAt.toISOString(),
+        openCase: links.get(p.reference) ?? null,
       })),
     };
   }
@@ -253,13 +363,13 @@ export async function listExceptions(kind: ExceptionKind, page: number, pageSize
     .limit(pageSize + 1)
     .toArray();
   const shown = docs.slice(0, pageSize);
-  const types = new Map(
-    (
-      await notifications
-        .find({ _id: { $in: shown.map((d) => d.notificationId) } }, { projection: { type: 1 } })
-        .toArray()
-    ).map((n) => [n._id.toHexString(), n.type as string]),
-  );
+  const [types, links] = await Promise.all([
+    notifications
+      .find({ _id: { $in: shown.map((d) => d.notificationId) } }, { projection: { type: 1 } })
+      .toArray()
+      .then((list) => new Map(list.map((n) => [n._id.toHexString(), n.type as string]))),
+    openCaseLinks("notification_delivery", shown.map((d) => d._id.toHexString())),
+  ]);
   return {
     kind,
     page,
@@ -272,7 +382,7 @@ export async function listExceptions(kind: ExceptionKind, page: number, pageSize
       lastFailure: d.lastFailure ? clip(d.lastFailure, 80) : null,
       notificationType: types.get(d.notificationId.toHexString()) ?? null,
       updatedAt: d.updatedAt.toISOString(),
+      openCase: links.get(d._id.toHexString()) ?? null,
     })),
   };
 }
-

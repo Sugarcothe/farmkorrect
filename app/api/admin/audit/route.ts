@@ -1,5 +1,5 @@
 import type { AuditPage } from "@/lib/admin/types";
-import { requireAdminRequest } from "@/lib/server/admin";
+import { requireAdminCapability } from "@/lib/server/admin";
 import { listAudit, parseAuditFilters } from "@/lib/server/admin-audit";
 import { ok, route } from "@/lib/server/http";
 import { limitUser } from "@/lib/server/order-access";
@@ -9,7 +9,7 @@ import { parsePage } from "@/lib/server/wallet";
 // ?targetId=, ?actor=). Read only: there is no way to edit or delete records.
 
 export const GET = route("admin/audit", async (request) => {
-  const { user } = await requireAdminRequest(request);
+  const { user } = await requireAdminCapability(request, "admin.audit.read");
   const params = new URL(request.url).searchParams;
   const filters = parseAuditFilters(params);
   const page = parsePage(params);

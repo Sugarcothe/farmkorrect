@@ -15,6 +15,19 @@ export const ADMIN_ACTIONS = [
   "course.update",
   "course.publish",
   "course.unpublish",
+  "membership.grant",
+  "membership.change",
+  "membership.revoke",
+  "user.suspend",
+  "user.reactivate",
+  "case.create",
+  "case.assign",
+  "case.priority",
+  "case.status",
+  "case.note",
+  "case.resolve",
+  "case.dismiss",
+  "case.reopen",
 ] as const;
 
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
@@ -31,12 +44,25 @@ export const ADMIN_ACTION_LABELS: Record<AdminAction, string> = {
   "course.update": "Course edited",
   "course.publish": "Course published",
   "course.unpublish": "Course unpublished",
+  "membership.grant": "Admin role granted",
+  "membership.change": "Admin role changed",
+  "membership.revoke": "Admin role revoked",
+  "user.suspend": "Account suspended",
+  "user.reactivate": "Account reactivated",
+  "case.create": "Case opened",
+  "case.assign": "Case assigned",
+  "case.priority": "Case priority changed",
+  "case.status": "Case status changed",
+  "case.note": "Case note added",
+  "case.resolve": "Case resolved",
+  "case.dismiss": "Case dismissed",
+  "case.reopen": "Case reopened",
 };
 
 export const isAdminAction = (value: unknown): value is AdminAction =>
   typeof value === "string" && (ADMIN_ACTIONS as readonly string[]).includes(value);
 
-export const AUDIT_TARGET_TYPES = ["user", "order", "review", "course"] as const;
+export const AUDIT_TARGET_TYPES = ["user", "order", "review", "course", "membership", "case"] as const;
 export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
 
 export const isAuditTargetType = (value: unknown): value is AuditTargetType =>
@@ -67,14 +93,27 @@ export type AuditEntry = {
 
 export type AuditPage = { entries: AuditEntry[]; page: number; hasMore: boolean };
 
+/**
+ * Dashboard counts. A key is left out when the viewer's role doesn't cover
+ * that queue, and is null when counting it failed: the page then shows an
+ * error, never a zero it doesn't know to be true.
+ */
 export type AdminSummary = {
-  pendingCredentials: number;
-  openIssues: number;
-  reviewsToModerate: number;
-  flaggedOrders: number;
-  flaggedPayouts: number;
-  failedDeliveries: number;
-  recentActions: AuditEntry[];
+  pendingCredentials?: number | null;
+  openIssues?: number | null;
+  reviewsToModerate?: number | null;
+  flaggedOrders?: number | null;
+  flaggedPayouts?: number | null;
+  flaggedBookings?: number | null;
+  failedDeliveries?: number | null;
+  openCases?: number | null;
+  urgentCases?: number | null;
+  unassignedCases?: number | null;
+  suspendedAccounts?: number | null;
+  /** suspensions and reactivations in the last 7 days */
+  recentAccountActions?: number | null;
+  /** left out without audit access; null when it couldn't be read */
+  recentActions?: AuditEntry[] | null;
 };
 
 export type CredentialCase = {
@@ -173,31 +212,103 @@ export type ModerationPage = { cases: ModerationCase[]; page: number; hasMore: b
 
 export type ModerationRequest = { action: ModerationAction; reason?: string; updatedAt: string };
 
-export const EXCEPTION_KINDS = ["orders", "payouts", "deliveries"] as const;
+export const EXCEPTION_KINDS = ["orders", "bookings", "payouts", "deliveries"] as const;
 export type ExceptionKind = (typeof EXCEPTION_KINDS)[number];
 
 export const isExceptionKind = (value: unknown): value is ExceptionKind =>
   typeof value === "string" && (EXCEPTION_KINDS as readonly string[]).includes(value);
 
+/** A short, fixed description of why something was flagged, derived on the server. */
+export const EXCEPTION_CATEGORIES = [
+  "amount_mismatch",
+  "totals_mismatch",
+  "refund_failed",
+  "refund_mismatch",
+  "ledger_refused",
+  "provider_mismatch",
+  "late_provider_event",
+  "unexpected_provider_status",
+  "other",
+] as const;
+export type ExceptionCategory = (typeof EXCEPTION_CATEGORIES)[number];
+
+export const EXCEPTION_CATEGORY_LABELS: Record<ExceptionCategory, string> = {
+  amount_mismatch: "Paid amount doesn't match",
+  totals_mismatch: "Totals don't add up",
+  refund_failed: "Refund failed",
+  refund_mismatch: "Refund amount doesn't match",
+  ledger_refused: "Ledger refused the entry",
+  provider_mismatch: "Provider details don't match",
+  late_provider_event: "Late or conflicting provider event",
+  unexpected_provider_status: "Unexpected provider status",
+  other: "Other",
+};
+
+/**
+ * What is known about the money for a flagged item. "ambiguous" means the
+ * provider's outcome isn't known, so nobody should assume it failed or worked.
+ */
+export type MoneyOutcome = "confirmed" | "failed" | "ambiguous" | "in_progress";
+
+export const MONEY_OUTCOME_LABELS: Record<MoneyOutcome, string> = {
+  confirmed: "Confirmed",
+  failed: "Failed",
+  ambiguous: "Outcome unknown",
+  in_progress: "In progress",
+};
+
+/** The open case for a flagged item, if one exists. */
+export type ExceptionCaseLink = { reference: string; status: string } | null;
+
 export type FlaggedOrder = {
   orderNumber: string;
   issue: string;
+  category: ExceptionCategory;
   paymentStatus: string;
+  outcome: MoneyOutcome;
   fulfillmentStatus: string;
+  /** what the order should have been paid */
   totalKobo: number;
+  /** what the provider reported as paid; null when nothing was recorded */
+  paidKobo: number | null;
   updatedAt: string;
+  openCase: ExceptionCaseLink;
+};
+
+/** A flagged Other Services booking. Read only: no refund or payment action exists here. */
+export type FlaggedBooking = {
+  reference: string;
+  status: string;
+  paymentStatus: string;
+  outcome: MoneyOutcome;
+  category: ExceptionCategory;
+  /** the sanitized reason, never a provider payload */
+  issue: string;
+  expectedKobo: number;
+  paidKobo: number | null;
+  refundedKobo: number;
+  /** the latest refund attempt's status, if any */
+  refundStatus: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  openCase: ExceptionCaseLink;
 };
 
 /** A payout that needs a look. Bank details are reduced to the last four digits. */
 export type FlaggedPayout = {
   reference: string;
   issue: string;
+  category: ExceptionCategory;
   status: string;
+  outcome: MoneyOutcome;
+  /** what the payout was for */
   amountKobo: number;
   bankName: string;
   accountNumberLast4: string;
   failureReason: string | null;
   updatedAt: string;
+  openCase: ExceptionCaseLink;
 };
 
 export type FailedDelivery = {
@@ -209,10 +320,12 @@ export type FailedDelivery = {
   lastFailure: string | null;
   notificationType: string | null;
   updatedAt: string;
+  openCase: ExceptionCaseLink;
 };
 
 export type ExceptionPage =
   | { kind: "orders"; items: FlaggedOrder[]; page: number; hasMore: boolean }
+  | { kind: "bookings"; items: FlaggedBooking[]; page: number; hasMore: boolean }
   | { kind: "payouts"; items: FlaggedPayout[]; page: number; hasMore: boolean }
   | { kind: "deliveries"; items: FailedDelivery[]; page: number; hasMore: boolean };
 

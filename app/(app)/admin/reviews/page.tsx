@@ -5,7 +5,7 @@ import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { Stars, VerifiedBadge } from "@/components/reviews/stars";
 import { EmptyList, first, formatDate, Pager } from "@/components/wallet/wallet-parts";
 import type { ModerationStatus } from "@/lib/admin/types";
-import { requireAdminPage } from "@/lib/server/admin";
+import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { isModerationStatus, listReviewsForModeration } from "@/lib/server/admin-reviews";
 
 export const metadata: Metadata = { title: "Reviews" };
@@ -23,7 +23,7 @@ export default async function AdminReviewsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { user } = await requireAdminPage();
+  const { user } = await requireAdminCapabilityPage("admin.reviews.moderate");
   const query = await searchParams;
   const requested = first(query.status);
   const status: ModerationStatus = isModerationStatus(requested) ? requested : "pending";

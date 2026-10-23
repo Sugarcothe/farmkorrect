@@ -658,7 +658,7 @@ export async function createNotifications(specs: NotificationSpec[], now = new D
       );
     }
     const user = recipients.get(key);
-    if (!user || user.status !== "active") continue;
+    if (!user || !mayReceive(user.status, spec.type)) continue;
 
     const { category, channels } = NOTIFICATION_TYPES[spec.type];
     const [prefs, available] = await Promise.all([getPreferences(user._id), channelAvailability(user)]);
@@ -811,6 +811,38 @@ export async function syncReviewNotification(reviewId: ObjectId, now = new Date(
   await reviews.updateOne({ _id: reviewId, notifySyncAt: review.notifySyncAt }, { $set: { notifySyncAt: null } });
 }
 
+/**
+ * Notifications only reach active accounts, with one exception: the notice
+ * that an account was suspended goes to that suspended account.
+ */
+export const mayReceive = (status: UserDoc["status"], type: NotificationType) =>
+  status === "active" || (status === "suspended" && type === "account_suspended");
+
+/**
+ * The owner hears that their account was suspended or reactivated. Only the
+ * latest change is notified, and never the admin's internal reason.
+ */
+export function accountStatusEventSpecs(user: Pick<UserDoc, "_id" | "suspension">): NotificationSpec[] {
+  const change = user.suspension;
+  if (!change) return [];
+  const id = user._id.toHexString();
+  const suspended = change.state === "suspended";
+  return [
+    {
+      recipientUserId: user._id,
+      type: suspended ? "account_suspended" : "account_reactivated",
+      title: suspended ? "Your Farm Korret account is suspended" : "Your Farm Korret account is active again",
+      body: suspended
+        ? "Our team suspended your account, so you can't sign in for now. Contact Farm Korret support if you think this is a mistake."
+        : "Our team reactivated your account. You can sign in again.",
+      url: suspended ? null : "/auth/sign-in",
+      eventKey: `account:${id}:${change.state}:${change.at.getTime()}`,
+      subject: { kind: "account", id },
+      eventAt: change.at,
+    },
+  ];
+}
+
 /** The professional hears the outcome of an admin's credential decision (not the internal reason). */
 export function credentialEventSpecs(user: UserDoc): NotificationSpec[] {
   const status = user.profile?.credentialStatus;
@@ -836,10 +868,10 @@ export function credentialEventSpecs(user: UserDoc): NotificationSpec[] {
 
 export async function syncCredentialNotification(userId: ObjectId, now = new Date()): Promise<void> {
   const { users } = await notificationCollections();
-  const user = await users.findOne({ _id: userId }, { projection: { profile: 1, notifySyncAt: 1 } });
+  const user = await users.findOne({ _id: userId }, { projection: { profile: 1, suspension: 1, notifySyncAt: 1 } });
   if (!user || !user.notifySyncAt) return;
   await createNotifications(
-    credentialEventSpecs(user).filter((spec) => !tooOld(spec.eventAt, now)),
+    [...credentialEventSpecs(user), ...accountStatusEventSpecs(user)].filter((spec) => !tooOld(spec.eventAt, now)),
     now,
   );
   await users.updateOne({ _id: userId, notifySyncAt: user.notifySyncAt }, { $set: { notifySyncAt: null } });

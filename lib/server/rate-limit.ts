@@ -48,6 +48,8 @@ export const LIMITS = {
   analyticsExportsPerUser: { limit: 30, windowMs: 60 * 60_000 },
   adminReadsPerUser: { limit: 600, windowMs: 15 * 60_000 },
   adminActionsPerUser: { limit: 300, windowMs: 60 * 60_000 },
+  // account lookups by id, phone or email: tight, so the directory can't be walked
+  adminUserLookupsPerUser: { limit: 60, windowMs: 15 * 60_000 },
   webhooksPerIp: { limit: 600, windowMs: 15 * 60_000 },
   // Find a Vet
   vetSearchesPerUser: { limit: 300, windowMs: 15 * 60_000 },

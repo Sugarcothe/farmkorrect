@@ -54,7 +54,7 @@ export type AuditFilters = {
   actorUserId: ObjectId | null;
 };
 
-const TARGET_ID = /^(?:[0-9a-f]{24}|FKO-[A-Z0-9]{8})$/;
+const TARGET_ID = /^(?:[0-9a-f]{24}|FKO-[A-Z0-9]{8}|FKC-[A-Z0-9]{8})$/;
 
 /** Reads filters from a query string; anything unrecognised is a 400, never ignored silently. */
 export function parseAuditFilters(params: URLSearchParams): AuditFilters {
@@ -65,7 +65,7 @@ export function parseAuditFilters(params: URLSearchParams): AuditFilters {
   const fieldErrors: Record<string, string> = {};
   if (action !== null && !isAdminAction(action)) fieldErrors.action = "Unknown action.";
   if (targetType !== null && !isAuditTargetType(targetType)) fieldErrors.targetType = "Unknown target type.";
-  if (targetId !== null && !TARGET_ID.test(targetId)) fieldErrors.targetId = "Enter a user, review or course id, or an order number.";
+  if (targetId !== null && !TARGET_ID.test(targetId)) fieldErrors.targetId = "Enter a user, review or course id, an order number or a case reference.";
   if (actor !== null && !/^[0-9a-f]{24}$/.test(actor)) fieldErrors.actor = "Enter an admin's user id.";
   if (Object.keys(fieldErrors).length) throw new HttpError(400, "Please correct the filters.", fieldErrors);
   return {
@@ -123,6 +123,11 @@ export async function listAudit(filters: AuditFilters, page: number, pageSize = 
 }
 
 /** Every record about one target, newest first (bounded), for a case's history. */
+/** How many records of these actions were written since `since` (served by action_recent). */
+export async function countAuditActions(actions: AdminAction[], since: Date): Promise<number> {
+  return (await auditCollection()).countDocuments({ action: { $in: actions }, at: { $gte: since } });
+}
+
 export async function auditFor(type: AuditTargetType, id: string, limit = 50): Promise<AuditEntry[]> {
   const docs = await (await auditCollection())
     .find({ "target.type": type, "target.id": id })

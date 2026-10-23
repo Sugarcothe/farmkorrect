@@ -19,6 +19,7 @@ import { findUserByIdentifier } from "@/lib/server/users";
 import { parseLogin } from "@/lib/server/validation";
 
 const BAD_CREDENTIALS = "Incorrect email/phone number or password.";
+const ACCOUNT_SUSPENDED = "This account is suspended. Contact Farm Korret support if you think this is a mistake.";
 
 // Password login by email or phone. Wrong passwords and unknown accounts get
 // the same message and take the same time. Failures are counted per account
@@ -28,6 +29,7 @@ const BAD_CREDENTIALS = "Incorrect email/phone number or password.";
 // Every successful login starts a brand-new session (and revokes the one the
 // browser had), so a session id can't be planted before login. Accounts that
 // never verified their phone only get a "pending" session and a fresh code.
+// Suspended accounts get no session at all.
 export const POST = route("login", async (request) => {
   assertSameOrigin(request);
   const input = parseLogin(await readJsonBody(request));
@@ -53,6 +55,9 @@ export const POST = route("login", async (request) => {
   }
   await reset("loginFailuresPerAccount", accountKey);
   await revokeSessionToken(readSessionToken(request));
+
+  // only said after the right password, so it doesn't reveal which accounts are suspended
+  if (user.status === "suspended") throw new HttpError(403, ACCOUNT_SUSPENDED);
 
   if (user.status === "pending_verification") {
     const issued = await issueChallenge(user._id);
