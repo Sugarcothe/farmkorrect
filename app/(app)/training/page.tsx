@@ -127,9 +127,9 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
     : null;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Korret Academy" back={<BackLink href="/home" />} />
-      <div className="flex flex-1 flex-col px-5 pb-8">
+      <div className="flex flex-1 flex-col px-5 pb-8 md:px-6">
         {farm && (
           <nav aria-label="Staff training" className="mb-4">
             <Link
@@ -155,7 +155,7 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
                 No courses have been assigned to your role yet.
               </p>
             ) : (
-              <ul className="space-y-3">
+              <ul className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full">
                 {a.courses.map((item) => (
                   <CourseRow key={item.id} course={item} progress={item.progress} />
                 ))}
@@ -169,7 +169,7 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
             <SectionHeading>
               <span id="continue-heading">Continue learning</span>
             </SectionHeading>
-            <ul className="space-y-3">
+            <ul className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full">
               {home.continueLearning.map((item) => (
                 <CourseRow key={item.id} course={item} progress={item.progress} />
               ))}
@@ -182,7 +182,7 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
             <SectionHeading>
               <span id="featured-heading">Featured courses</span>
             </SectionHeading>
-            <ul className="space-y-3">
+            <ul className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full">
               {home.featured.map((course) => (
                 <CourseRow key={course.id} course={course} />
               ))}
@@ -210,7 +210,10 @@ export default async function TrainingPage({ searchParams }: { searchParams: Pro
               </EmptyList>
             )
           ) : (
-            <ul aria-label="Courses" className="space-y-3">
+            <ul
+              aria-label="Courses"
+              className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full"
+            >
               {catalog.courses.map((course) => (
                 <CourseRow key={course.id} course={course} />
               ))}

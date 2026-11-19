@@ -9,6 +9,8 @@
   --primary-dark: #003b25;
   --accent: #087a3d;
   --primary-foreground: #ffffff;
+  /* bright green for accents on dark green (landing page) */
+  --highlight: #9be15d;
 }
 
 @theme inline {
@@ -20,6 +22,7 @@
   --color-primary-dark: var(--primary-dark);
   --color-accent: var(--accent);
   --color-primary-foreground: var(--primary-foreground);
+  --color-highlight: var(--highlight);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -41,6 +44,25 @@ body {
   padding-right: env(safe-area-inset-right);
   /* app-like feel: no text selection or tap highlight on UI chrome */
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Signed-in pages from tablet width up: a page reads as a centred column
+ * unless it opts into a wider layout with data-wide (or data-wide="md") on
+ * its <main>.
+ */
+@media (width >= 48rem) {
+  .app-content > main {
+    width: 100%;
+    max-width: 44rem;
+    margin-inline: auto;
+  }
+  .app-content > main[data-wide] {
+    max-width: 76rem;
+  }
+  .app-content > main[data-wide="md"] {
+    max-width: 64rem;
+  }
 }
 
 /* let full-bleed screens (splash, onboarding hero) extend under the notch */

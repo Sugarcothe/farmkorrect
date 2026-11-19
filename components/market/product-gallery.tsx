@@ -10,7 +10,7 @@ export function ProductGallery({ name, images }: { name: string; images: Product
   if (images.length === 0)
     return (
       <div className={frame}>
-        <ProductPhoto image={undefined} alt={name} width={800} sizes="100vw" />
+        <ProductPhoto image={undefined} alt={name} width={800} sizes="(min-width: 1024px) 50vw, 100vw" />
       </div>
     );
   const many = images.length > 1;
@@ -27,14 +27,16 @@ export function ProductGallery({ name, images }: { name: string; images: Product
               image={image}
               alt={many ? `${name}, photo ${i + 1} of ${images.length}` : name}
               width={1200}
-              sizes="(min-width: 420px) 380px, 90vw"
+              sizes="(min-width: 1024px) 50vw, 90vw"
               priority={i === 0}
               fit="contain"
             />
           </li>
         ))}
       </ul>
-      {many && <p className="mt-1.5 text-center text-xs text-muted-foreground">{images.length} photos · swipe for more</p>}
+      {many && (
+        <p className="mt-1.5 text-center text-xs text-muted-foreground">{images.length} photos · swipe for more</p>
+      )}
     </section>
   );
 }

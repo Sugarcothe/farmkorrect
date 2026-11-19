@@ -60,9 +60,9 @@ export function VerificationBadge({ credential }: { credential: CredentialStatus
 /** `action` is an optional control for the right-hand slot (e.g. the notifications bell). */
 export function ProfileTopBar({ title, back, action }: { title: string; back?: ReactNode; action?: ReactNode }) {
   return (
-    <header className="sticky top-0 z-10 grid h-14 shrink-0 grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-3 backdrop-blur">
+    <header className="sticky top-0 z-10 grid h-14 shrink-0 grid-cols-[3rem_1fr_3rem] items-center bg-surface/95 px-3 backdrop-blur lg:h-16 lg:grid-cols-[auto_1fr_auto] lg:gap-2 lg:px-5">
       {back ?? <span />}
-      <h1 className="text-center text-base font-semibold">{title}</h1>
+      <h1 className="text-center text-base font-semibold lg:text-left lg:text-xl">{title}</h1>
       {action && <div className="flex justify-end">{action}</div>}
     </header>
   );

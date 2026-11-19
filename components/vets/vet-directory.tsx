@@ -352,7 +352,10 @@ export function VetDirectory({
         )
       ) : (
         <>
-          <ul aria-label="Vets" className="flex flex-col gap-3">
+          <ul
+            aria-label="Vets"
+            className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full"
+          >
             {vets.map((v) => (
               <li key={v.id}>
                 <VetCardView vet={v} href={`/vets/${v.id}`} />
@@ -368,6 +371,7 @@ export function VetDirectory({
             <Button
               type="button"
               variant="outline"
+              className="md:mx-auto md:w-auto md:min-w-64"
               loading={moreStatus === "loading"}
               onClick={() => void load(query, cursor)}
             >

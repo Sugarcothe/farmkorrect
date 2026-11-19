@@ -207,7 +207,7 @@ export function ServiceDirectory({
         <h2 id="service-categories" className="mb-2 text-sm font-semibold">
           Categories
         </h2>
-        <div role="group" aria-label="Categories" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div role="group" aria-label="Categories" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {MARKETPLACE_CATEGORIES.map((c) => {
             const on = query.category === c.value;
             return (
@@ -375,7 +375,10 @@ export function ServiceDirectory({
         )
       ) : (
         <>
-          <ul aria-label="Services" className="flex flex-col gap-3">
+          <ul
+            aria-label="Services"
+            className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 xl:grid-cols-3 md:[&>li>*]:h-full"
+          >
             {services.map((s) => (
               <li key={s.id}>
                 <ServiceCardView service={s} />
@@ -391,6 +394,7 @@ export function ServiceDirectory({
             <Button
               type="button"
               variant="outline"
+              className="md:mx-auto md:w-auto md:min-w-64"
               loading={moreStatus === "loading"}
               onClick={() => void load(query, cursor)}
             >

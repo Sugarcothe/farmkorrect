@@ -46,33 +46,46 @@ export default async function MarketProductPage({
   const reviews = await loadReviews(user._id, product.id, reviewPage(first((await searchParams).reviews)));
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Product" back={<BackLink href="/market" />} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <ProductGallery name={product.name} images={product.images} />
-        <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-foreground/5">
-          <h2 className="text-xl font-semibold tracking-tight">{product.name}</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {categoryLabel(product.category)} · sold by {product.own ? "you" : product.sellerName}
-          </p>
-          {place && (
-            <p className="mt-1 flex items-center gap-1 text-xs text-foreground/60">
-              <Icon name="map-pin" className="size-3.5 shrink-0" />
-              {place}
+      {/* desktop: photos and reviews on the left, details and buying on the right; phones keep this order */}
+      <div className="flex flex-1 flex-col gap-4 px-5 pb-8 md:px-6 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-8 lg:gap-y-6">
+        <div className="lg:col-start-1 lg:row-start-1">
+          <ProductGallery name={product.name} images={product.images} />
+        </div>
+        <div className="flex flex-col gap-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+          <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-foreground/5">
+            <h2 className="text-xl font-semibold tracking-tight lg:text-2xl">{product.name}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {categoryLabel(product.category)} · sold by {product.own ? "you" : product.sellerName}
             </p>
+            {place && (
+              <p className="mt-1 flex items-center gap-1 text-xs text-foreground/60">
+                <Icon name="map-pin" className="size-3.5 shrink-0" />
+                {place}
+              </p>
+            )}
+            <p className="mt-3 text-2xl font-bold tabular-nums text-primary">
+              <OfferPrice priceKobo={product.priceKobo} offer={product.offer} />{" "}
+              <span className="text-sm font-medium text-muted-foreground">{unitLabel(product.unit)}</span>
+            </p>
+            {product.offer && <OfferTerms offer={product.offer} />}
+            {product.description && (
+              <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">
+                {product.description}
+              </p>
+            )}
+          </section>
+          <FulfillmentOptions fulfillment={product.fulfillment} />
+          <BuyForm product={product} />
+        </div>
+        <div className="lg:col-start-1 lg:row-start-2">
+          {reviews ? (
+            <ProductReviews productId={product.id} {...reviews} />
+          ) : (
+            <ReviewsUnavailable productId={product.id} />
           )}
-          <p className="mt-3 text-2xl font-bold tabular-nums text-primary">
-            <OfferPrice priceKobo={product.priceKobo} offer={product.offer} />{" "}
-            <span className="text-sm font-medium text-muted-foreground">{unitLabel(product.unit)}</span>
-          </p>
-          {product.offer && <OfferTerms offer={product.offer} />}
-          {product.description && (
-            <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">{product.description}</p>
-          )}
-        </section>
-        <FulfillmentOptions fulfillment={product.fulfillment} />
-        <BuyForm product={product} />
-        {reviews ? <ProductReviews productId={product.id} {...reviews} /> : <ReviewsUnavailable productId={product.id} />}
+        </div>
       </div>
     </main>
   );

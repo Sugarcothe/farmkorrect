@@ -49,13 +49,13 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
   const filtered = activeFilters(query).length > 0;
 
   const shortcut =
-    "flex flex-1 items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2.5 text-[0.8125rem] font-medium text-primary ring-1 ring-foreground/8 outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-accent";
+    "flex flex-1 items-center justify-center gap-1.5 rounded-full md:flex-none md:px-4 bg-white px-3 py-2.5 text-[0.8125rem] font-medium text-primary ring-1 ring-foreground/8 outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-accent";
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Market" />
-      <div className="flex flex-1 flex-col px-5 pb-8">
-        <nav aria-label="Your Market activity" className="mb-4 flex gap-2">
+      <div className="flex flex-1 flex-col px-5 pb-8 md:px-6">
+        <nav aria-label="Your Market activity" className="mb-4 flex gap-2 md:mb-5">
           <Link href="/orders" className={shortcut}>
             <Icon name="list" className="size-4" />
             My orders
@@ -91,7 +91,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         </div>
 
         {!results ? (
-          <div role="alert" className="flex flex-col items-center rounded-3xl bg-white px-6 py-10 text-center shadow-sm ring-1 ring-foreground/5">
+          <div
+            role="alert"
+            className="flex flex-col items-center rounded-3xl bg-white px-6 py-10 text-center shadow-sm ring-1 ring-foreground/5"
+          >
             <div className="flex size-14 items-center justify-center rounded-2xl bg-red-50 text-red-700">
               <Icon name="alert-circle" className="size-7" />
             </div>
@@ -107,7 +110,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
             </Link>
           </div>
         ) : results.products.length ? (
-          <ul aria-label="Products" className="grid grid-cols-2 gap-3">
+          <ul aria-label="Products" className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
             {results.products.map((p) => (
               <li key={p.id}>
                 <ProductCard product={p} />
@@ -116,7 +119,10 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
           </ul>
         ) : query.page > 1 ? (
           <EmptyList icon="store" title="No more products">
-            <Link href={marketHref({ ...query, page: 1 })} className="font-medium text-primary underline-offset-2 hover:underline">
+            <Link
+              href={marketHref({ ...query, page: 1 })}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
               Back to the first page
             </Link>
           </EmptyList>

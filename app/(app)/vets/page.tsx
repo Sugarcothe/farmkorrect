@@ -40,13 +40,13 @@ export default async function VetsPage({ searchParams }: { searchParams: Promise
   const page = await firstPage(query);
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Find a Vet" back={<BackLink href="/home" />} />
-      <div className="flex flex-1 flex-col px-5 pb-8">
-        <nav aria-label="Your appointments" className="mb-4">
+      <div className="flex flex-1 flex-col px-5 pb-8 md:px-6">
+        <nav aria-label="Your appointments" className="mb-4 md:mb-5 md:flex">
           <Link
             href="/appointments"
-            className="flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2.5 text-[0.8125rem] font-medium text-primary ring-1 ring-foreground/8 outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2.5 md:px-4 text-[0.8125rem] font-medium text-primary ring-1 ring-foreground/8 outline-none hover:bg-primary/5 focus-visible:ring-2 focus-visible:ring-accent"
           >
             <Icon name="calendar" className="size-4" />
             My appointments
