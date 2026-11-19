@@ -32,7 +32,7 @@ export function ProductCard({ product: p }: { product: MarketProduct }) {
       className="flex h-full flex-col rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-foreground/5 outline-none hover:ring-primary/30 focus-visible:ring-2 focus-visible:ring-accent"
     >
       <span className="relative -mx-3.5 -mt-3.5 block aspect-[4/3] overflow-hidden rounded-t-3xl bg-primary/8">
-        <ProductPhoto image={p.images[0]} alt={p.name} width={480} sizes="(min-width: 420px) 200px, 50vw" />
+        <ProductPhoto image={p.images[0]} alt={p.name} width={480} sizes="(min-width: 1280px) 280px, (min-width: 768px) 33vw, 50vw" />
         {p.offer && <OfferBadge offer={p.offer} className="absolute top-2 left-2" />}
         {p.rating && (
           <span

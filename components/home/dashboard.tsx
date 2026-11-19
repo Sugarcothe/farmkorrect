@@ -24,24 +24,24 @@ export function Dashboard({
   bell: ReactNode;
 }) {
   return (
-    <main className="flex flex-1 flex-col">
-      <header className="flex items-start justify-between gap-3 rounded-b-3xl bg-primary px-5 pt-6 pb-6 text-primary-foreground">
+    <main data-wide className="flex flex-1 flex-col">
+      <header className="flex items-start justify-between gap-3 rounded-b-3xl bg-primary px-5 pt-6 pb-6 text-primary-foreground md:mx-6 md:mt-6 md:rounded-3xl md:px-8 md:py-8">
         <div className="min-w-0">
-          <p className="text-sm text-primary-foreground/80">{greeting},</p>
-          <h1 className="mt-0.5 truncate text-xl font-semibold">{name}</h1>
-          <p className="mt-1 truncate text-xs text-primary-foreground/75">{subtitle}</p>
+          <p className="text-sm text-primary-foreground/80 md:text-base">{greeting},</p>
+          <h1 className="mt-0.5 truncate text-xl font-semibold md:text-3xl">{name}</h1>
+          <p className="mt-1 truncate text-xs text-primary-foreground/75 md:text-sm">{subtitle}</p>
         </div>
         {bell}
       </header>
 
-      <div className="flex flex-1 flex-col gap-6 px-5 pt-5 pb-8">
+      <div className="flex flex-1 flex-col gap-6 px-5 pt-5 pb-8 md:gap-8 md:px-6 md:pt-8">
         {stats !== null && <StatsSection stats={stats} />}
 
         <section aria-labelledby="quick-actions-heading">
-          <h2 id="quick-actions-heading" className="mb-3 text-base font-semibold">
+          <h2 id="quick-actions-heading" className="mb-3 text-base font-semibold md:text-lg">
             Quick Actions
           </h2>
-          <ul className="grid grid-cols-2 gap-3">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 md:gap-4">
             {actions.map((a) => (
               <li key={a.key} className="flex">
                 <Link
@@ -90,7 +90,7 @@ function StatsSection({ stats }: { stats: DashboardStats | "unavailable" }) {
       <h2 id="stats-heading" className="sr-only">
         Your jobs
       </h2>
-      <dl className="grid grid-cols-2 gap-3">
+      <dl className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {cards.map((c) => (
           <div key={c.label} className="rounded-2xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-foreground/5">
             <dt className="text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase">{c.label}</dt>

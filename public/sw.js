@@ -1,5 +1,5 @@
 // bump when precached files change so old copies (e.g. icons) are dropped
-const CACHE_NAME = "farm-korrect-v4";
+const CACHE_NAME = "farm-korrect-v5";
 const OFFLINE_URL = "/";
 
 const PRECACHE_URLS = [

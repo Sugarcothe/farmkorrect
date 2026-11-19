@@ -50,88 +50,89 @@ export default async function ProfilePage({
       : `${profile.yearsOfExperience} ${profile.yearsOfExperience === 1 ? "year" : "years"} experience`;
 
   return (
-    <main className="flex flex-1 flex-col pb-6">
+    <main data-wide="md" className="flex flex-1 flex-col pb-6">
       <ProfileTopBar title="Profile" action={<NotificationBell />} />
 
-      <section aria-label="Your profile" className="px-5">
-        <div className="flex flex-col items-center rounded-3xl bg-white px-5 pt-6 pb-5 text-center shadow-sm ring-1 ring-foreground/5">
-          <ProfileAvatar photoUrl={profile.photoUrl} name={profile.fullName} />
-          <h2 className="mt-3 text-xl font-bold tracking-tight">{profile.fullName}</h2>
-          <p className="mt-0.5 text-sm font-medium text-primary">
-            {specialization ? `${config.title} · ${specialization}` : config.title}
-          </p>
-          {(years || profile.location) && (
-            <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
-              {years && <span>{years}</span>}
-              {years && profile.location && <span aria-hidden="true">·</span>}
-              {profile.location && (
-                <span className="inline-flex items-center gap-1">
-                  <Icon name="map-pin" className="size-3.5" />
-                  {profile.location}
-                </span>
-              )}
+      {/* desktop: the profile card beside the settings menu */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:items-start lg:gap-8 lg:px-6">
+        <section aria-label="Your profile" className="px-5 lg:px-0">
+          <div className="flex flex-col items-center rounded-3xl bg-white px-5 pt-6 pb-5 text-center shadow-sm ring-1 ring-foreground/5">
+            <ProfileAvatar photoUrl={profile.photoUrl} name={profile.fullName} />
+            <h2 className="mt-3 text-xl font-bold tracking-tight">{profile.fullName}</h2>
+            <p className="mt-0.5 text-sm font-medium text-primary">
+              {specialization ? `${config.title} · ${specialization}` : config.title}
             </p>
-          )}
-          <div className="mt-3">
-            <VerificationBadge credential={config.hasCredential ? profile.credentialStatus : null} />
+            {(years || profile.location) && (
+              <p className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+                {years && <span>{years}</span>}
+                {years && profile.location && <span aria-hidden="true">·</span>}
+                {profile.location && (
+                  <span className="inline-flex items-center gap-1">
+                    <Icon name="map-pin" className="size-3.5" />
+                    {profile.location}
+                  </span>
+                )}
+              </p>
+            )}
+            <div className="mt-3">
+              <VerificationBadge credential={config.hasCredential ? profile.credentialStatus : null} />
+            </div>
+            {profile.farm && (
+              <p className="mt-3 text-sm text-foreground/75">
+                {profile.farm.farmName} · {FARM_TYPE_LABELS[profile.farm.farmType]} ·{" "}
+                {profile.farm.birdCount.toLocaleString("en-NG")} birds
+              </p>
+            )}
+            {profile.bio && (
+              <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">{profile.bio}</p>
+            )}
           </div>
-          {profile.farm && (
-            <p className="mt-3 text-sm text-foreground/75">
-              {profile.farm.farmName} · {FARM_TYPE_LABELS[profile.farm.farmType]} ·{" "}
-              {profile.farm.birdCount.toLocaleString("en-NG")} birds
-            </p>
-          )}
-          {profile.bio && (
-            <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-foreground/75">
-              {profile.bio}
-            </p>
-          )}
-        </div>
 
-        {justSaved && (
-          <div className="mt-4">
-            <FormAlert tone="success">Your profile has been updated.</FormAlert>
-          </div>
-        )}
-      </section>
+          {justSaved && (
+            <div className="mt-4">
+              <FormAlert tone="success">Your profile has been updated.</FormAlert>
+            </div>
+          )}
+        </section>
 
-      <nav aria-label="Profile settings" className="mt-5 px-5">
-        <ul className="divide-y divide-foreground/6 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-foreground/5">
-          <li>
-            <Link href="/profile/edit" className={menuRowClass}>
-              <MenuRowContent icon="pencil" label="Edit Profile" />
-            </Link>
-          </li>
-          {marketRows.map((row) => (
-            <li key={row.href}>
-              <Link href={row.href} className={menuRowClass}>
-                <MenuRowContent icon={row.icon} label={row.label} />
-              </Link>
-            </li>
-          ))}
-          {config.sections.map((section) => (
-            <li key={section}>
-              <Link href={`/profile/${section}`} className={menuRowClass}>
-                <MenuRowContent
-                  icon={SECTION_INFO[section].icon}
-                  label={SECTION_INFO[section].title}
-                  soon={!SECTION_INFO[section].ready}
-                />
-              </Link>
-            </li>
-          ))}
-          {showAdmin && (
+        <nav aria-label="Profile settings" className="mt-5 px-5 lg:mt-0 lg:px-0">
+          <ul className="divide-y divide-foreground/6 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-foreground/5">
             <li>
-              <Link href="/admin" className={menuRowClass}>
-                <MenuRowContent icon="shield-check" label="Admin" />
+              <Link href="/profile/edit" className={menuRowClass}>
+                <MenuRowContent icon="pencil" label="Edit Profile" />
               </Link>
             </li>
-          )}
-          <li>
-            <LogOutRow />
-          </li>
-        </ul>
-      </nav>
+            {marketRows.map((row) => (
+              <li key={row.href}>
+                <Link href={row.href} className={menuRowClass}>
+                  <MenuRowContent icon={row.icon} label={row.label} />
+                </Link>
+              </li>
+            ))}
+            {config.sections.map((section) => (
+              <li key={section}>
+                <Link href={`/profile/${section}`} className={menuRowClass}>
+                  <MenuRowContent
+                    icon={SECTION_INFO[section].icon}
+                    label={SECTION_INFO[section].title}
+                    soon={!SECTION_INFO[section].ready}
+                  />
+                </Link>
+              </li>
+            ))}
+            {showAdmin && (
+              <li>
+                <Link href="/admin" className={menuRowClass}>
+                  <MenuRowContent icon="shield-check" label="Admin" />
+                </Link>
+              </li>
+            )}
+            <li>
+              <LogOutRow />
+            </li>
+          </ul>
+        </nav>
+      </div>
     </main>
   );
 }
