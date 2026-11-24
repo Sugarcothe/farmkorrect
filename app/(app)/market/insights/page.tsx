@@ -45,7 +45,7 @@ export default async function InsightsPage({
   const range = report?.range ?? null;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Sales Insights" back={<BackLink href="/market" />} />
       <div className="flex flex-1 flex-col gap-6 px-5 pb-8">
         <PeriodPicker
@@ -75,7 +75,8 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
   return (
     <>
       <p className="-mt-2 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{PERIOD_LABELS[range.period]}</span>: {rangeLabel(range)} (Lagos time).
+        <span className="font-medium text-foreground">{PERIOD_LABELS[range.period]}</span>: {rangeLabel(range)} (Lagos
+        time).
         {prev
           ? ` Compared with ${rangeLabel(range.previous)}.`
           : " You have no orders from before this period, so there's nothing to compare with yet."}
@@ -85,24 +86,42 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
         title="Sales overview"
         note={
           <>
-            Sales collected is what buyers actually paid (after any discount) for orders paid in this period; unpaid, cancelled
-            before payment and expired orders are never counted. Refunds are counted when Paystack confirmed them, even for a sale
-            from an earlier period.
+            Sales collected is what buyers actually paid (after any discount) for orders paid in this period; unpaid,
+            cancelled before payment and expired orders are never counted. Refunds are counted when Paystack confirmed
+            them, even for a sale from an earlier period.
           </>
         }
       >
         <StatGrid label="Sales overview">
           <Stat label="Sales collected" value={cur.salesKobo} format="kobo" previous={p((a) => a.salesKobo)} />
           <Stat label="Paid orders" value={cur.paid} format="count" previous={p((a) => a.paid)} />
-          <Stat label="Refunds" value={cur.refundsKobo} format="kobo" previous={p((a) => a.refundsKobo)} hint={`${count(cur.refundedOrders)} order${cur.refundedOrders === 1 ? "" : "s"}`} />
+          <Stat
+            label="Refunds"
+            value={cur.refundsKobo}
+            format="kobo"
+            previous={p((a) => a.refundsKobo)}
+            hint={`${count(cur.refundedOrders)} order${cur.refundedOrders === 1 ? "" : "s"}`}
+          />
           <Stat
             label="Sales after refunds"
             value={cur.salesKobo - cur.refundsKobo}
             format="kobo"
             previous={prev ? prev.salesKobo - prev.refundsKobo : null}
           />
-          <Stat label="Discounts you gave" value={cur.discountKobo} format="kobo" previous={p((a) => a.discountKobo)} hint="Never collected, so not part of sales" />
-          <Stat label="Orders placed" value={cur.placed} format="count" previous={p((a) => a.placed)} hint="Paid or not" />
+          <Stat
+            label="Discounts you gave"
+            value={cur.discountKobo}
+            format="kobo"
+            previous={p((a) => a.discountKobo)}
+            hint="Never collected, so not part of sales"
+          />
+          <Stat
+            label="Orders placed"
+            value={cur.placed}
+            format="count"
+            previous={p((a) => a.placed)}
+            hint="Paid or not"
+          />
           <Stat label="Completed (delivered)" value={cur.completed} format="count" previous={p((a) => a.completed)} />
           <Stat
             label="Cancelled"
@@ -111,7 +130,12 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
             previous={prev ? prev.cancelledUnpaid + prev.cancelledPaid : null}
             hint={`${count(cur.cancelledUnpaid)} before payment (incl. expired), ${count(cur.cancelledPaid)} after`}
           />
-          <Stat label="Awaiting payment now" value={overview.awaitingPaymentNow} format="count" hint="Current, not for the period" />
+          <Stat
+            label="Awaiting payment now"
+            value={overview.awaitingPaymentNow}
+            format="count"
+            hint="Current, not for the period"
+          />
         </StatGrid>
         <TrendChart
           points={report.trend}
@@ -120,7 +144,13 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
           title="Sales collected"
           granularity={range.granularity}
         />
-        <TrendChart points={report.trend} value={(t) => t.paidOrders} format="count" title="Paid orders" granularity={range.granularity} />
+        <TrendChart
+          points={report.trend}
+          value={(t) => t.paidOrders}
+          format="count"
+          title="Paid orders"
+          granularity={range.granularity}
+        />
       </Section>
 
       <Section
@@ -129,7 +159,8 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
       >
         {products.insufficientHistory && (
           <p role="status" className="rounded-2xl bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900">
-            Not enough history yet: fewer than {MIN_ORDERS_FOR_RANKING} paid orders in this period, so rankings say little.
+            Not enough history yet: fewer than {MIN_ORDERS_FOR_RANKING} paid orders in this period, so rankings say
+            little.
           </p>
         )}
         {products.bySales.length ? (
@@ -166,9 +197,9 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
         title="Earnings"
         note={
           <>
-            Earnings, fees and refunds come from your wallet ledger: they&apos;re recorded when an order&apos;s payment is
-            settled, so they can differ from sales collected in the same period. Discounts are already reflected in what buyers
-            paid and aren&apos;t subtracted again. Balances are exactly what your{" "}
+            Earnings, fees and refunds come from your wallet ledger: they&apos;re recorded when an order&apos;s payment
+            is settled, so they can differ from sales collected in the same period. Discounts are already reflected in
+            what buyers paid and aren&apos;t subtracted again. Balances are exactly what your{" "}
             <Link href="/wallet" className="font-medium text-primary underline">
               Wallet
             </Link>{" "}
@@ -177,16 +208,31 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
         }
       >
         <StatGrid label="Earnings this period">
-          <Stat label="Earnings recorded" value={earnings.ledger.earningsKobo} format="kobo" hint="Gross, from paid orders" />
-          <Stat label="Platform fees" value={earnings.ledger.feesKobo} format="kobo" hint="As recorded in your ledger" />
-          <Stat label="Refunds from earnings" value={earnings.ledger.refundsKobo} format="kobo" hint="Your share of refunds" />
+          <Stat
+            label="Earnings recorded"
+            value={earnings.ledger.earningsKobo}
+            format="kobo"
+            hint="Gross, from paid orders"
+          />
+          <Stat
+            label="Platform fees"
+            value={earnings.ledger.feesKobo}
+            format="kobo"
+            hint="As recorded in your ledger"
+          />
+          <Stat
+            label="Refunds from earnings"
+            value={earnings.ledger.refundsKobo}
+            format="kobo"
+            hint="Your share of refunds"
+          />
           <Stat label="Net earnings" value={earnings.ledger.netKobo} format="kobo" />
         </StatGrid>
         {earnings.paidNotInLedgerNow > 0 && (
           <p role="status" className="rounded-2xl bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900">
-            {count(earnings.paidNotInLedgerNow)} paid order{earnings.paidNotInLedgerNow === 1 ? " isn't" : "s aren't"} in your
-            ledger yet, so {earnings.paidNotInLedgerNow === 1 ? "its earning isn't" : "their earnings aren't"} counted above. No
-            amount is estimated for them.
+            {count(earnings.paidNotInLedgerNow)} paid order{earnings.paidNotInLedgerNow === 1 ? " isn't" : "s aren't"}{" "}
+            in your ledger yet, so {earnings.paidNotInLedgerNow === 1 ? "its earning isn't" : "their earnings aren't"}{" "}
+            counted above. No amount is estimated for them.
           </p>
         )}
         <Facts
@@ -197,21 +243,32 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
             ["On hold (under review)", formatKobo(earnings.balances.underReviewKobo)],
             ["Held for payouts", formatKobo(earnings.balances.heldKobo)],
             ["Paid out to date", formatKobo(earnings.balances.paidOutKobo)],
-            ...(earnings.balances.owedKobo > 0 ? ([["Owed from future earnings", formatKobo(earnings.balances.owedKobo)]] as [string, string][]) : []),
+            ...(earnings.balances.owedKobo > 0
+              ? ([["Owed from future earnings", formatKobo(earnings.balances.owedKobo)]] as [string, string][])
+              : []),
           ]}
         />
         <DataTable
           caption="Payouts requested in this period, by current status"
-          columns={[{ label: "Payouts requested" }, { label: "Count", numeric: true }, { label: "Amount", numeric: true }]}
+          columns={[
+            { label: "Payouts requested" },
+            { label: "Count", numeric: true },
+            { label: "Amount", numeric: true },
+          ]}
           rows={(["requested", "processing", "paid", "failed"] as const).map((s) => ({
             key: s,
-            cells: [s[0].toUpperCase() + s.slice(1), count(earnings.payouts.requested[s].count), formatKobo(earnings.payouts.requested[s].amountKobo)],
+            cells: [
+              s[0].toUpperCase() + s.slice(1),
+              count(earnings.payouts.requested[s].count),
+              formatKobo(earnings.payouts.requested[s].amountKobo),
+            ],
           }))}
         />
         <p className="text-xs text-muted-foreground">
           Paid to your bank in this period: {formatKobo(earnings.payouts.paidInPeriod.amountKobo)} (
-          {count(earnings.payouts.paidInPeriod.count)}). Failed in this period: {formatKobo(earnings.payouts.failedInPeriod.amountKobo)} (
-          {count(earnings.payouts.failedInPeriod.count)}); a failed payout&apos;s amount goes back to your balance.
+          {count(earnings.payouts.paidInPeriod.count)}). Failed in this period:{" "}
+          {formatKobo(earnings.payouts.failedInPeriod.amountKobo)} ({count(earnings.payouts.failedInPeriod.count)}); a
+          failed payout&apos;s amount goes back to your balance.
         </p>
       </Section>
 
@@ -234,7 +291,10 @@ function SellerReportView({ report }: { report: NonNullable<Awaited<ReturnType<t
               cells: [
                 <span key="n" className="flex flex-col items-start gap-1">
                   {pr.state ? (
-                    <Link href={`/market/promotions/${pr.promotionId}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      href={`/market/promotions/${pr.promotionId}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {pr.name}
                     </Link>
                   ) : (
@@ -282,8 +342,16 @@ function ProductTable({ caption, rows }: { caption: string; rows: ProductPerform
       <h3 className="text-sm font-medium">{caption}</h3>
       <DataTable
         caption={caption}
-        columns={[{ label: "Product" }, { label: "Units", numeric: true }, { label: "Orders", numeric: true }, { label: "Sales", numeric: true }]}
-        rows={rows.map((r) => ({ key: r.productId, cells: [r.name, count(r.units), count(r.orders), formatKobo(r.salesKobo)] }))}
+        columns={[
+          { label: "Product" },
+          { label: "Units", numeric: true },
+          { label: "Orders", numeric: true },
+          { label: "Sales", numeric: true },
+        ]}
+        rows={rows.map((r) => ({
+          key: r.productId,
+          cells: [r.name, count(r.units), count(r.orders), formatKobo(r.salesKobo)],
+        }))}
       />
     </div>
   );

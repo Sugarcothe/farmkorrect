@@ -55,9 +55,9 @@ export async function JobsPage({
   const label = JOB_TABS.find((t) => t.value === tab)!.label;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="My jobs" />
-      <div className="flex-1 px-5 pb-8">
+      <div className="flex-1 px-5 pb-8 md:px-6">
         <nav aria-label="Job lists" className="-mx-1 mb-4 flex gap-1 overflow-x-auto px-1 pb-1">
           {JOB_TABS.map((t) => {
             const current = t.value === tab;
@@ -93,7 +93,7 @@ export async function JobsPage({
             {cursor ? "You've reached the end of this list." : empty.body}
           </EmptyList>
         ) : (
-          <ul aria-label={`${label} jobs`} className="space-y-3">
+          <ul aria-label={`${label} jobs`} className="flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4">
             {page.appointments.map((job) => (
               <JobCard key={job.id} job={job} href={`/appointments/${job.id}?from=${tab}`} />
             ))}

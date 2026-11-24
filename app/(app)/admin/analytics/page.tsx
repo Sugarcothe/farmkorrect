@@ -44,7 +44,7 @@ export default async function AdminAnalyticsPage({
   const report = resolved.ok ? await getAdminReport(resolved.range) : null;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Analytics" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col gap-6 px-5 pb-8">
         <PeriodPicker
@@ -76,8 +76,11 @@ function AdminReportView({ report }: { report: AdminReport }) {
   return (
     <>
       <p className="-mt-2 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{PERIOD_LABELS[range.period]}</span>: {rangeLabel(range)} (Lagos time).
-        {prev ? ` Compared with ${rangeLabel(range.previous)}.` : " No orders from before this period, so there's no comparison."}
+        <span className="font-medium text-foreground">{PERIOD_LABELS[range.period]}</span>: {rangeLabel(range)} (Lagos
+        time).
+        {prev
+          ? ` Compared with ${rangeLabel(range.previous)}.`
+          : " No orders from before this period, so there's no comparison."}
       </p>
 
       <Section
@@ -136,15 +139,49 @@ function AdminReportView({ report }: { report: AdminReport }) {
             previous={prev ? prev.cancelledUnpaid + prev.cancelledPaid : null}
             hint={`${count(cur.cancelledUnpaid)} before payment (incl. expired), ${count(cur.cancelledPaid)} after`}
           />
-          <Stat label="Orders with refunds" value={cur.refundedOrders} format="count" previous={p((a) => a.refundedOrders)} />
-          <Stat label="Paid with a promotion" value={cur.promotionOrders} format="count" previous={p((a) => a.promotionOrders)} />
+          <Stat
+            label="Orders with refunds"
+            value={cur.refundedOrders}
+            format="count"
+            previous={p((a) => a.refundedOrders)}
+          />
+          <Stat
+            label="Paid with a promotion"
+            value={cur.promotionOrders}
+            format="count"
+            previous={p((a) => a.promotionOrders)}
+          />
         </StatGrid>
-        <TrendChart points={report.trend} value={(t) => t.salesKobo} format="kobo" title="Paid amounts" granularity={range.granularity} />
-        <TrendChart points={report.trend} value={(t) => t.placed} format="count" title="Orders placed" granularity={range.granularity} />
-        <TrendChart points={report.trend} value={(t) => t.newAccounts} format="count" title="New accounts" granularity={range.granularity} />
+        <TrendChart
+          points={report.trend}
+          value={(t) => t.salesKobo}
+          format="kobo"
+          title="Paid amounts"
+          granularity={range.granularity}
+        />
+        <TrendChart
+          points={report.trend}
+          value={(t) => t.placed}
+          format="count"
+          title="Orders placed"
+          granularity={range.granularity}
+        />
+        <TrendChart
+          points={report.trend}
+          value={(t) => t.newAccounts}
+          format="count"
+          title="New accounts"
+          granularity={range.granularity}
+        />
         <div className="grid gap-3 sm:grid-cols-2">
-          <Facts label="Payment status now" rows={orders.paymentStatusNow.map((s) => [statusLabel(s.status), count(s.count)])} />
-          <Facts label="Fulfilment status now" rows={orders.fulfillmentStatusNow.map((s) => [statusLabel(s.status), count(s.count)])} />
+          <Facts
+            label="Payment status now"
+            rows={orders.paymentStatusNow.map((s) => [statusLabel(s.status), count(s.count)])}
+          />
+          <Facts
+            label="Fulfilment status now"
+            rows={orders.fulfillmentStatusNow.map((s) => [statusLabel(s.status), count(s.count)])}
+          />
         </div>
       </Section>
 
@@ -157,10 +194,18 @@ function AdminReportView({ report }: { report: AdminReport }) {
           <Stat label="Sellers with paid orders in period" value={sellers.withPaidOrders} format="count" />
           <Stat label="Sellers with live listings" value={sellers.withLiveListingsNow} format="count" />
           <Stat label="Sellers running a promotion" value={sellers.withActivePromotionNow} format="count" />
-          <Stat label="Orders paid with a promotion" value={cur.promotionOrders} format="count" hint={`${formatKobo(cur.discountKobo)} discount granted`} />
+          <Stat
+            label="Orders paid with a promotion"
+            value={cur.promotionOrders}
+            format="count"
+            hint={`${formatKobo(cur.discountKobo)} discount granted`}
+          />
         </StatGrid>
         {report.promotions.byStatusNow.length > 0 && (
-          <Facts label="Promotions by status now" rows={report.promotions.byStatusNow.map((s) => [statusLabel(s.status), count(s.count)])} />
+          <Facts
+            label="Promotions by status now"
+            rows={report.promotions.byStatusNow.map((s) => [statusLabel(s.status), count(s.count)])}
+          />
         )}
       </Section>
 
@@ -168,17 +213,28 @@ function AdminReportView({ report }: { report: AdminReport }) {
         title="Money"
         note={
           <>
-            Net captured = paid amounts − refunds, both for this period (a flow, not a balance; a refund can be for an earlier
-            sale). Earnings and fees come only from the ledger and are recorded when payments settle, so they can differ from
-            paid amounts in the same period. Payouts are counted by the date of each event and kept separate.
+            Net captured = paid amounts − refunds, both for this period (a flow, not a balance; a refund can be for an
+            earlier sale). Earnings and fees come only from the ledger and are recorded when payments settle, so they
+            can differ from paid amounts in the same period. Payouts are counted by the date of each event and kept
+            separate.
           </>
         }
       >
         <StatGrid label="Money this period">
           <Stat label="Paid amounts" value={f.paidKobo} format="kobo" previous={p((a) => a.salesKobo)} />
           <Stat label="Refunds" value={f.refundsKobo} format="kobo" previous={p((a) => a.refundsKobo)} />
-          <Stat label="Net captured" value={f.netCapturedKobo} format="kobo" previous={prev ? prev.salesKobo - prev.refundsKobo : null} />
-          <Stat label="Discounts granted" value={cur.discountKobo} format="kobo" hint="Funded by sellers; never collected" />
+          <Stat
+            label="Net captured"
+            value={f.netCapturedKobo}
+            format="kobo"
+            previous={prev ? prev.salesKobo - prev.refundsKobo : null}
+          />
+          <Stat
+            label="Discounts granted"
+            value={cur.discountKobo}
+            format="kobo"
+            hint="Funded by sellers; never collected"
+          />
         </StatGrid>
         <Facts
           label="Ledger (recorded in this period)"
@@ -215,15 +271,36 @@ function AdminReportView({ report }: { report: AdminReport }) {
           caption="Exceptions now"
           columns={[{ label: "Queue" }, { label: "Now", numeric: true }]}
           rows={[
-            { key: "issues", cells: [<QueueLink key="l" href="/admin/issues" label="Open order issues" />, count(op.openIssues)] },
-            { key: "orders", cells: [<QueueLink key="l" href="/admin/exceptions?kind=orders" label="Flagged orders" />, count(op.flaggedOrders)] },
-            { key: "payouts", cells: [<QueueLink key="l" href="/admin/exceptions?kind=payouts" label="Flagged payouts" />, count(op.flaggedPayouts)] },
+            {
+              key: "issues",
+              cells: [<QueueLink key="l" href="/admin/issues" label="Open order issues" />, count(op.openIssues)],
+            },
+            {
+              key: "orders",
+              cells: [
+                <QueueLink key="l" href="/admin/exceptions?kind=orders" label="Flagged orders" />,
+                count(op.flaggedOrders),
+              ],
+            },
+            {
+              key: "payouts",
+              cells: [
+                <QueueLink key="l" href="/admin/exceptions?kind=payouts" label="Flagged payouts" />,
+                count(op.flaggedPayouts),
+              ],
+            },
             {
               key: "deliveries",
-              cells: [<QueueLink key="l" href="/admin/exceptions?kind=deliveries" label="Failed notification deliveries" />, count(op.failedDeliveries)],
+              cells: [
+                <QueueLink key="l" href="/admin/exceptions?kind=deliveries" label="Failed notification deliveries" />,
+                count(op.failedDeliveries),
+              ],
             },
             { key: "sync", cells: ["Orders waiting for a ledger update", count(op.ledgerSyncPending)] },
-            { key: "noledger", cells: ["Paid orders with no ledger record (no commission policy at payment)", count(op.paidNotInLedger)] },
+            {
+              key: "noledger",
+              cells: ["Paid orders with no ledger record (no commission policy at payment)", count(op.paidNotInLedger)],
+            },
           ]}
         />
       </Section>
@@ -232,7 +309,11 @@ function AdminReportView({ report }: { report: AdminReport }) {
         title="Downloads"
         note={`A CSV of the daily or weekly figures for this period, amounts in kobo (₦1 = 100 kobo), up to ${count(CSV_ROW_LIMIT)} rows. No personal details.`}
       >
-        <Downloads endpoint="/api/admin/analytics/export" range={range} reports={[{ report: "trend", label: "marketplace trend" }]} />
+        <Downloads
+          endpoint="/api/admin/analytics/export"
+          range={range}
+          reports={[{ report: "trend", label: "marketplace trend" }]}
+        />
       </Section>
 
       <p className="text-xs text-muted-foreground">Figures as of {formatDate(report.generatedAt, true)}.</p>

@@ -17,7 +17,13 @@ type Tile = { key: keyof AdminSummary; href: string; label: string; icon: IconNa
 // Each tile only appears when the admin's role covers that queue (the
 // summary leaves the count out otherwise).
 const TILES: Tile[] = [
-  { key: "openCases", href: "/admin/cases", label: "Open cases", icon: "briefcase", note: "Investigations in progress" },
+  {
+    key: "openCases",
+    href: "/admin/cases",
+    label: "Open cases",
+    icon: "briefcase",
+    note: "Investigations in progress",
+  },
   {
     key: "urgentCases",
     href: "/admin/cases",
@@ -111,14 +117,24 @@ export default async function AdminPage() {
     { href: "/admin/cases", label: "Case centre", icon: "briefcase", show: access.can("admin.cases.read") },
     { href: "/admin/users", label: "Find an account", icon: "search", show: access.can("admin.users.read") },
     { href: "/admin/team", label: "Admin team and roles", icon: "shield-check", show: access.can("admin.team.manage") },
-    { href: "/admin/analytics", label: "Marketplace analytics", icon: "list", show: access.can("admin.analytics.read") },
-    { href: "/admin/training", label: "Training courses", icon: "graduation-cap", show: access.can("admin.training.manage") },
+    {
+      href: "/admin/analytics",
+      label: "Marketplace analytics",
+      icon: "list",
+      show: access.can("admin.analytics.read"),
+    },
+    {
+      href: "/admin/training",
+      label: "Training courses",
+      icon: "graduation-cap",
+      show: access.can("admin.training.manage"),
+    },
   ];
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Admin" back={<BackLink href="/profile" />} />
-      <div className="flex flex-1 flex-col gap-5 px-5 pb-8">
+      <div className="flex flex-1 flex-col gap-5 px-5 pb-8 md:px-6">
         <p className="-mb-2 flex items-center gap-2 text-xs text-muted-foreground">
           Signed in as <Pill tone="good">{ADMIN_ROLE_LABELS[access.role]}</Pill>
           {access.root && <span>(root, from server configuration)</span>}
@@ -129,7 +145,7 @@ export default async function AdminPage() {
           </p>
         )}
         {tiles.length > 0 && (
-          <section aria-label="Queues" className="grid grid-cols-2 gap-3">
+          <section aria-label="Queues" className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 xl:grid-cols-4">
             {tiles.map((t) => {
               const count = summary[t.key] as number | null;
               return (
@@ -158,40 +174,43 @@ export default async function AdminPage() {
           </section>
         )}
 
-        <div className="flex flex-col gap-2">
-          {links
-            .filter((l) => l.show)
-            .map((l) => (
-              <Link key={l.href} href={l.href} className={buttonClasses("outline", "gap-2")}>
-                <Icon name={l.icon} className="size-4" />
-                {l.label}
-              </Link>
-            ))}
-        </div>
+        {/* desktop: shortcuts beside the recent actions */}
+        <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+          <div className="flex flex-col gap-2">
+            {links
+              .filter((l) => l.show)
+              .map((l) => (
+                <Link key={l.href} href={l.href} className={buttonClasses("outline", "gap-2")}>
+                  <Icon name={l.icon} className="size-4" />
+                  {l.label}
+                </Link>
+              ))}
+          </div>
 
-        {summary.recentActions !== undefined && (
-          <section aria-labelledby="recent-heading">
-            <div className="mb-2 flex items-center justify-between">
-              <h2 id="recent-heading" className="text-sm font-semibold">
-                Recent admin actions
-              </h2>
-              <Link href="/admin/audit" className="text-sm font-medium text-primary hover:underline">
-                Audit trail
-              </Link>
-            </div>
-            {summary.recentActions === null ? (
-              <p role="alert" className="rounded-xl bg-red-50 px-3.5 py-3 text-sm text-red-800">
-                Recent actions couldn&apos;t be loaded. Reload to try again.
-              </p>
-            ) : summary.recentActions.length ? (
-              <AuditList entries={summary.recentActions} showTarget />
-            ) : (
-              <EmptyList icon="shield-check" title="No admin actions yet">
-                Admin decisions and changes are recorded here as they happen.
-              </EmptyList>
-            )}
-          </section>
-        )}
+          {summary.recentActions !== undefined && (
+            <section aria-labelledby="recent-heading">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 id="recent-heading" className="text-sm font-semibold">
+                  Recent admin actions
+                </h2>
+                <Link href="/admin/audit" className="text-sm font-medium text-primary hover:underline">
+                  Audit trail
+                </Link>
+              </div>
+              {summary.recentActions === null ? (
+                <p role="alert" className="rounded-xl bg-red-50 px-3.5 py-3 text-sm text-red-800">
+                  Recent actions couldn&apos;t be loaded. Reload to try again.
+                </p>
+              ) : summary.recentActions.length ? (
+                <AuditList entries={summary.recentActions} showTarget />
+              ) : (
+                <EmptyList icon="shield-check" title="No admin actions yet">
+                  Admin decisions and changes are recorded here as they happen.
+                </EmptyList>
+              )}
+            </section>
+          )}
+        </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
           Payouts, refunds, payments and the ledger can&apos;t be changed from here. Flagged items are shown for
