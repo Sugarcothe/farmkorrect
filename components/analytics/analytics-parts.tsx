@@ -53,7 +53,9 @@ export function PeriodPicker({
             href={`${basePath}?period=${p}`}
             aria-current={p === period ? "page" : undefined}
             className={`rounded-full px-3 py-1.5 text-[0.8125rem] font-medium ring-1 outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-              p === period ? "bg-primary text-white ring-primary" : "bg-white text-foreground/70 ring-foreground/10 hover:text-foreground"
+              p === period
+                ? "bg-primary text-white ring-primary"
+                : "bg-white text-foreground/70 ring-foreground/10 hover:text-foreground"
             }`}
           >
             {PERIOD_LABELS[p]}
@@ -82,7 +84,10 @@ export function PeriodPicker({
             className="h-10 rounded-xl bg-white px-3 text-sm text-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
-        <button type="submit" className={buttonClasses(period === "custom" ? "solid" : "outline", "h-10 w-auto px-4 text-sm")}>
+        <button
+          type="submit"
+          className={buttonClasses(period === "custom" ? "solid" : "outline", "h-10 w-auto px-4 text-sm")}
+        >
           Show range
         </button>
       </form>
@@ -108,7 +113,15 @@ type Format = "kobo" | "count";
 const show = (value: number, format: Format) => (format === "kobo" ? formatKobo(value) : count(value));
 
 /** "+₦1,200 (+12.5%) vs previous period", or why there's no comparison. */
-export function ChangeNote({ current, previous, format }: { current: number; previous: number | null; format: Format }) {
+export function ChangeNote({
+  current,
+  previous,
+  format,
+}: {
+  current: number;
+  previous: number | null;
+  format: Format;
+}) {
   if (previous === null) return null;
   const { difference, percent } = changeOf(current, previous);
   if (difference === null) return null;
@@ -152,14 +165,16 @@ export function Stat({
 
 export function StatGrid({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <dl aria-label={label} className="grid grid-cols-2 gap-3">
+    <dl aria-label={label} className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
       {children}
     </dl>
   );
 }
 
 const bucketLabel = (p: Pick<TrendPoint, "from" | "to">) =>
-  p.from === p.to ? formatDate(`${p.from}T12:00:00Z`) : `${formatDate(`${p.from}T12:00:00Z`)} – ${formatDate(`${p.to}T12:00:00Z`)}`;
+  p.from === p.to
+    ? formatDate(`${p.from}T12:00:00Z`)
+    : `${formatDate(`${p.from}T12:00:00Z`)} – ${formatDate(`${p.to}T12:00:00Z`)}`;
 
 /**
  * Bars for one figure of the trend, with a text summary and the full series
@@ -211,7 +226,9 @@ export function TrendChart<T extends TrendPoint>({
         </div>
       )}
       <table className="sr-only">
-        <caption>{title}, by {unit}</caption>
+        <caption>
+          {title}, by {unit}
+        </caption>
         <thead>
           <tr>
             <th scope="col">{granularity === "day" ? "Day" : "Week"}</th>
@@ -287,7 +304,12 @@ export function Downloads({
   return (
     <div className="flex flex-col gap-2">
       {reports.map((r) => (
-        <a key={r.report} href={`${endpoint}?report=${r.report}&${q}`} download className={buttonClasses("outline", "text-sm")}>
+        <a
+          key={r.report}
+          href={`${endpoint}?report=${r.report}&${q}`}
+          download
+          className={buttonClasses("outline", "text-sm")}
+        >
           Download {r.label} (CSV)
         </a>
       ))}
