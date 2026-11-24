@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { AccountLookup } from "@/components/admin/account-lookup";
-import { CaseLink, pageHref, pageParam } from "@/components/admin/admin-parts";
+import { AdminTable, pageHref, pageParam } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
-import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
+import { EmptyList, first, formatDate, Pager } from "@/components/wallet/wallet-parts";
 import { ROLE_LABELS } from "@/lib/auth/types";
 import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listSuspendedAccounts } from "@/lib/server/admin-accounts";
@@ -23,7 +23,7 @@ export default async function UsersPage({
   const suspended = await listSuspendedAccounts(page);
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Accounts" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col gap-5 px-5 pb-8">
         <AccountLookup />
@@ -36,16 +36,30 @@ export default async function UsersPage({
               Accounts an admin suspends are listed here until they&apos;re reactivated.
             </EmptyList>
           ) : (
-            <ListCard label="Suspended accounts">
-              {suspended.accounts.map((a) => (
-                <CaseLink key={a.id} href={`/admin/users/${a.id}`}>
+            <AdminTable
+              label="Suspended accounts"
+              rows={suspended.accounts}
+              rowKey={(a) => a.id}
+              href={(a) => `/admin/users/${a.id}`}
+              columns={[
+                { header: "Name", cell: (a) => <span className="font-medium">{a.fullName}</span> },
+                { header: "Role", cell: (a) => ROLE_LABELS[a.role] },
+                { header: "Phone", cell: (a) => a.phoneMasked, className: "whitespace-nowrap tabular-nums" },
+                {
+                  header: "Joined",
+                  cell: (a) => formatDate(a.createdAt),
+                  className: "whitespace-nowrap text-muted-foreground",
+                },
+              ]}
+              card={(a) => (
+                <>
                   <p className="text-sm font-medium">{a.fullName}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {ROLE_LABELS[a.role]} · {a.phoneMasked} · Joined {formatDate(a.createdAt)}
                   </p>
-                </CaseLink>
-              ))}
-            </ListCard>
+                </>
+              )}
+            />
           )}
           <Pager
             newer={page > 1 ? pageHref("/admin/users", {}, page - 1) : null}

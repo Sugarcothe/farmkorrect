@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { AdminTabs, CaseLink, pageHref, pageParam, Pill } from "@/components/admin/admin-parts";
+import { AdminTabs, AdminTable, pageHref, pageParam, Pill } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
-import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
+import { EmptyList, first, formatDate, Pager } from "@/components/wallet/wallet-parts";
 import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listIssues } from "@/lib/server/admin-queues";
 import { formatKobo } from "@/lib/wallet/money";
@@ -23,7 +23,7 @@ export default async function IssuesPage({
   const filters = { state: state === "closed" ? "closed" : null };
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Order issues" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col px-5 pb-8">
         <AdminTabs
@@ -35,9 +35,40 @@ export default async function IssuesPage({
           ]}
         />
         {cases.length ? (
-          <ListCard label={state === "open" ? "Open issues" : "Closed issues"}>
-            {cases.map((c) => (
-              <CaseLink key={c.orderNumber} href={`/admin/issues/${c.orderNumber}`}>
+          <AdminTable
+            label={state === "open" ? "Open issues" : "Closed issues"}
+            rows={cases}
+            rowKey={(c) => c.orderNumber}
+            href={(c) => `/admin/issues/${c.orderNumber}`}
+            columns={[
+              { header: "Order", cell: (c) => <span className="font-mono font-medium">{c.orderNumber}</span> },
+              {
+                header: "Reported problem",
+                cell: (c) => <span className="line-clamp-2 text-foreground/80">{c.note}</span>,
+              },
+              {
+                header: "Total",
+                cell: (c) => formatKobo(c.totalKobo),
+                className: "text-right font-semibold whitespace-nowrap tabular-nums",
+              },
+              {
+                header: "Money",
+                cell: (c) => (
+                  <span className="flex flex-wrap gap-1">
+                    {c.earningHeld && <Pill tone="waiting">Earning held</Pill>}
+                    {c.refundPendingKobo > 0 && <Pill tone="waiting">Refund in progress</Pill>}
+                    {c.refundedKobo > 0 && <Pill>Refunded {formatKobo(c.refundedKobo)}</Pill>}
+                  </span>
+                ),
+              },
+              {
+                header: "Reported",
+                cell: (c) => formatDate(c.reportedAt, true),
+                className: "whitespace-nowrap text-muted-foreground",
+              },
+            ]}
+            card={(c) => (
+              <>
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-mono text-sm font-medium">{c.orderNumber}</p>
                   <span className="text-sm font-semibold tabular-nums">{formatKobo(c.totalKobo)}</span>
@@ -49,9 +80,9 @@ export default async function IssuesPage({
                   {c.refundPendingKobo > 0 && <Pill tone="waiting">Refund in progress</Pill>}
                   {c.refundedKobo > 0 && <Pill>Refunded {formatKobo(c.refundedKobo)}</Pill>}
                 </div>
-              </CaseLink>
-            ))}
-          </ListCard>
+              </>
+            )}
+          />
         ) : (
           <EmptyList icon="check-circle" title={state === "open" ? "No open issues" : "No closed issues"}>
             {state === "open"

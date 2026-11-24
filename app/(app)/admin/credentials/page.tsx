@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { CaseLink, pageHref, pageParam } from "@/components/admin/admin-parts";
+import { AdminTable, pageHref, pageParam } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
-import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
+import { EmptyList, first, formatDate, Pager } from "@/components/wallet/wallet-parts";
 import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { listPendingCredentials } from "@/lib/server/admin-credentials";
 
@@ -20,13 +20,27 @@ export default async function CredentialsPage({
   const { cases, hasMore } = await listPendingCredentials(page);
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Credentials" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col px-5 pb-8">
         {cases.length ? (
-          <ListCard label="Credentials to review">
-            {cases.map((c) => (
-              <CaseLink key={c.userId} href={`/admin/credentials/${c.userId}`}>
+          <AdminTable
+            label="Credentials to review"
+            rows={cases}
+            rowKey={(c) => c.userId}
+            href={(c) => `/admin/credentials/${c.userId}`}
+            columns={[
+              { header: "Name", cell: (c) => <span className="font-medium">{c.fullName}</span> },
+              { header: "Role", cell: (c) => ROLE_LABELS[c.role] },
+              { header: "Registration no.", cell: (c) => c.registrationNumber },
+              {
+                header: "Submitted",
+                cell: (c) => (c.submittedAt ? formatDate(c.submittedAt, true) : "Not recorded"),
+                className: "whitespace-nowrap text-muted-foreground",
+              },
+            ]}
+            card={(c) => (
+              <>
                 <p className="truncate text-[0.9375rem] font-medium">{c.fullName}</p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {ROLE_LABELS[c.role]} · Reg. {c.registrationNumber}
@@ -34,9 +48,9 @@ export default async function CredentialsPage({
                 {c.submittedAt && (
                   <p className="mt-0.5 text-xs text-muted-foreground">Submitted {formatDate(c.submittedAt, true)}</p>
                 )}
-              </CaseLink>
-            ))}
-          </ListCard>
+              </>
+            )}
+          />
         ) : (
           <EmptyList icon="award" title={page > 1 ? "No more submissions" : "Nothing to review"}>
             When a veterinarian or specialist submits their registration details, they&apos;ll wait here for a decision.

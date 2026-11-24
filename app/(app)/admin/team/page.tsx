@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { CaseLink, Pill } from "@/components/admin/admin-parts";
+import { AdminTable, Pill } from "@/components/admin/admin-parts";
 import { GrantRoleForm } from "@/components/admin/team-forms";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
-import { EmptyList, formatDate, ListCard } from "@/components/wallet/wallet-parts";
+import { EmptyList, formatDate } from "@/components/wallet/wallet-parts";
 import { ADMIN_CAPABILITY_LABELS, ADMIN_ROLE_LABELS, ADMIN_ROLES, ROLE_CAPABILITIES } from "@/lib/admin/permissions";
 import { requireAdminCapabilityPage } from "@/lib/server/admin";
 import { getTeam } from "@/lib/server/admin-team";
@@ -18,16 +18,43 @@ export default async function TeamPage() {
   const team = await getTeam();
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Admin team" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col gap-5 px-5 pb-8">
         <section aria-labelledby="members-heading">
           <h2 id="members-heading" className="mb-2 text-sm font-semibold">
             Admins
           </h2>
-          <ListCard label="Admins">
-            {team.members.map((m) => (
-              <CaseLink key={m.userId} href={`/admin/team/${m.userId}`}>
+          <AdminTable
+            label="Admins"
+            rows={team.members}
+            rowKey={(m) => m.userId}
+            href={(m) => `/admin/team/${m.userId}`}
+            columns={[
+              { header: "Name", cell: (m) => <span className="font-medium">{m.fullName}</span> },
+              {
+                header: "Role",
+                cell: (m) => (
+                  <Pill tone={m.root ? "good" : "neutral"}>
+                    {ADMIN_ROLE_LABELS[m.role]}
+                    {m.root ? " · root" : ""}
+                  </Pill>
+                ),
+              },
+              {
+                header: "Granted",
+                cell: (m) =>
+                  m.root ? "From server configuration" : m.grantedAt ? formatDate(m.grantedAt) : "Not recorded",
+                className: "whitespace-nowrap text-muted-foreground",
+              },
+              {
+                header: "Granted by",
+                cell: (m) => (m.root ? "" : (m.grantedByName ?? "a removed account")),
+                className: "text-muted-foreground",
+              },
+            ]}
+            card={(m) => (
+              <>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium">{m.fullName}</p>
                   <Pill tone={m.root ? "good" : "neutral"}>
@@ -40,9 +67,9 @@ export default async function TeamPage() {
                     ? "From server configuration"
                     : `Granted ${m.grantedAt ? formatDate(m.grantedAt) : ""} by ${m.grantedByName ?? "a removed account"}`}
                 </p>
-              </CaseLink>
-            ))}
-          </ListCard>
+              </>
+            )}
+          />
         </section>
 
         <GrantRoleForm root={access.root} />
@@ -56,17 +83,35 @@ export default async function TeamPage() {
               Revoked roles are kept here and in the audit trail.
             </EmptyList>
           ) : (
-            <ListCard label="Revoked roles">
-              {team.revoked.map((r) => (
-                <CaseLink key={r.membershipId} href={`/admin/team/${r.userId}`}>
+            <AdminTable
+              label="Revoked roles"
+              rows={team.revoked}
+              rowKey={(r) => r.membershipId}
+              href={(r) => `/admin/team/${r.userId}`}
+              columns={[
+                { header: "Name", cell: (r) => <span className="font-medium">{r.fullName}</span> },
+                { header: "Was", cell: (r) => ADMIN_ROLE_LABELS[r.role] },
+                {
+                  header: "Revoked",
+                  cell: (r) => formatDate(r.revokedAt),
+                  className: "whitespace-nowrap text-muted-foreground",
+                },
+                {
+                  header: "Revoked by",
+                  cell: (r) => r.revokedByName ?? "a removed account",
+                  className: "text-muted-foreground",
+                },
+              ]}
+              card={(r) => (
+                <>
                   <p className="text-sm font-medium">{r.fullName}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     Was {ADMIN_ROLE_LABELS[r.role]} · revoked {formatDate(r.revokedAt)} by{" "}
                     {r.revokedByName ?? "a removed account"}
                   </p>
-                </CaseLink>
-              ))}
-            </ListCard>
+                </>
+              )}
+            />
           )}
         </section>
 

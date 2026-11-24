@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AuditList, pageHref, pageParam } from "@/components/admin/admin-parts";
+import { AuditTable, pageHref, pageParam } from "@/components/admin/admin-parts";
 import { FormAlert } from "@/components/auth/auth-screen";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
 import { buttonClasses } from "@/components/ui/button";
@@ -44,10 +44,15 @@ export default async function AuditPage({
   const filtered = Object.values(raw).some(Boolean);
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Audit trail" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <form method="get" action="/admin/audit" className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Filter the audit trail">
+        <form
+          method="get"
+          action="/admin/audit"
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+          aria-label="Filter the audit trail"
+        >
           <label className="text-xs font-medium text-muted-foreground">
             Action
             <select name="action" defaultValue={raw.action ?? ""} className={`${fieldClass} mt-1`}>
@@ -72,7 +77,12 @@ export default async function AuditPage({
           </label>
           <label className="text-xs font-medium text-muted-foreground">
             Target id or order number
-            <input name="targetId" defaultValue={raw.targetId ?? ""} placeholder="e.g. FKO-…" className={`${fieldClass} mt-1`} />
+            <input
+              name="targetId"
+              defaultValue={raw.targetId ?? ""}
+              placeholder="e.g. FKO-…"
+              className={`${fieldClass} mt-1`}
+            />
           </label>
           <label className="text-xs font-medium text-muted-foreground">
             Admin user id
@@ -92,7 +102,7 @@ export default async function AuditPage({
 
         {result &&
           (result.entries.length ? (
-            <AuditList entries={result.entries} showTarget />
+            <AuditTable entries={result.entries} />
           ) : (
             <EmptyList icon="shield-check" title={filtered ? "No matching records" : "No admin actions yet"}>
               {filtered

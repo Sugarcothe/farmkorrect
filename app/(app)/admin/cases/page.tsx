@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { AdminTabs, CaseLink, pageHref, pageParam, Pill, PRIORITY_TONE } from "@/components/admin/admin-parts";
+import { AdminTabs, AdminTable, pageHref, pageParam, Pill, PRIORITY_TONE } from "@/components/admin/admin-parts";
 import { BackLink, ProfileTopBar } from "@/components/profile/profile-parts";
-import { EmptyList, first, formatDate, ListCard, Pager } from "@/components/wallet/wallet-parts";
+import { EmptyList, first, formatDate, Pager } from "@/components/wallet/wallet-parts";
 import {
   CASE_PRIORITIES,
   CASE_PRIORITY_LABELS,
@@ -54,7 +54,7 @@ export default async function CasesPage({
   };
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide className="flex flex-1 flex-col">
       <ProfileTopBar title="Cases" back={<BackLink href="/admin" />} />
       <div className="flex flex-1 flex-col px-5 pb-8">
         <dl className="mb-4 grid grid-cols-3 gap-2 text-center">
@@ -77,7 +77,11 @@ export default async function CasesPage({
             { key: "closed", label: "Closed", href: "/admin/cases?state=closed" },
           ]}
         />
-        <form method="get" className="mb-4 grid grid-cols-2 gap-2" aria-label="Filter cases">
+        <form
+          method="get"
+          className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+          aria-label="Filter cases"
+        >
           {filters.state === "closed" && <input type="hidden" name="state" value="closed" />}
           <select name="type" defaultValue={filters.type ?? ""} aria-label="Type" className={selectClass}>
             <option value="">All types</option>
@@ -110,7 +114,7 @@ export default async function CasesPage({
           </select>
           <button
             type="submit"
-            className="col-span-2 h-10 rounded-full bg-primary text-sm font-medium text-primary-foreground outline-none hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-accent"
+            className="col-span-2 h-10 rounded-full lg:col-span-1 lg:px-6 bg-primary text-sm font-medium text-primary-foreground outline-none hover:bg-primary-dark focus-visible:ring-2 focus-visible:ring-accent"
           >
             Apply filters
           </button>
@@ -122,9 +126,40 @@ export default async function CasesPage({
               : "No closed cases match."}
           </EmptyList>
         ) : (
-          <ListCard label={filters.state === "open" ? "Open cases" : "Closed cases"}>
-            {result.cases.map((c) => (
-              <CaseLink key={c.reference} href={`/admin/cases/${c.reference}`}>
+          <AdminTable
+            label={filters.state === "open" ? "Open cases" : "Closed cases"}
+            rows={result.cases}
+            rowKey={(c) => c.reference}
+            href={(c) => `/admin/cases/${c.reference}`}
+            columns={[
+              {
+                header: "Reference",
+                cell: (c) => <span className="font-mono text-xs font-medium">{c.reference}</span>,
+              },
+              { header: "Title", cell: (c) => <span className="font-medium">{c.title}</span> },
+              { header: "Type", cell: (c) => CASE_TYPE_LABELS[c.type], className: "whitespace-nowrap" },
+              {
+                header: "Priority",
+                cell: (c) => <Pill tone={PRIORITY_TONE[c.priority]}>{CASE_PRIORITY_LABELS[c.priority]}</Pill>,
+              },
+              {
+                header: "Status",
+                cell: (c) => (
+                  <Pill tone={c.status === "resolved" ? "good" : "neutral"}>{CASE_STATUS_LABELS[c.status]}</Pill>
+                ),
+              },
+              {
+                header: "Assignee",
+                cell: (c) => (c.assignee ? c.assignee.name : <span className="text-muted-foreground">Unassigned</span>),
+              },
+              {
+                header: filters.state === "open" ? "Opened" : "Updated",
+                cell: (c) => formatDate(filters.state === "open" ? c.createdAt : c.updatedAt, true),
+                className: "whitespace-nowrap text-muted-foreground",
+              },
+            ]}
+            card={(c) => (
+              <>
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-mono text-xs font-medium">{c.reference}</p>
                   <span className="flex gap-1">
@@ -137,9 +172,9 @@ export default async function CasesPage({
                   {CASE_TYPE_LABELS[c.type]} · {c.assignee ? c.assignee.name : "Unassigned"} ·{" "}
                   {formatDate(filters.state === "open" ? c.createdAt : c.updatedAt, true)}
                 </p>
-              </CaseLink>
-            ))}
-          </ListCard>
+              </>
+            )}
+          />
         )}
         <Pager
           newer={page > 1 ? pageHref("/admin/cases", params, page - 1) : null}
