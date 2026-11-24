@@ -30,15 +30,19 @@ export default async function OrderPage({
   const reference = returned && PAYMENT_REFERENCE.test(returned) ? returned : null;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Order" back={<BackLink href="/orders" />} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <OrderHeader order={order} />
-        <IssueNotice order={order} />
-        <BuyerActions order={order} returnedReference={reference} />
-        <OrderItems order={order} />
-        <DeliveryNote order={order} />
-        <OrderHistory order={order} />
+      <div className="flex flex-1 flex-col gap-4 px-5 pb-8 md:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start lg:gap-6">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-6">
+          <OrderHeader order={order} />
+          <IssueNotice order={order} />
+          <BuyerActions order={order} returnedReference={reference} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <OrderItems order={order} />
+          <DeliveryNote order={order} />
+          <OrderHistory order={order} />
+        </div>
       </div>
     </main>
   );
