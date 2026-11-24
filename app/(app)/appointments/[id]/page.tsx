@@ -58,86 +58,103 @@ export default async function AppointmentPage({
   const visitShown = asVet && (a.bookingStatus === "in_progress" || a.bookingStatus === "completed");
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title={title} back={<BackLink href={back} />} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <Headline appointment={a} />
-        {visitShown && (
-          <VisitTimer
-            startedAt={a.startedAt}
-            serverNow={now.toISOString()}
-            plannedMinutes={a.service.durationMinutes}
-            running={a.bookingStatus === "in_progress"}
-            endedAt={a.completedAt}
-          />
-        )}
-        <AppointmentActions appointment={a} />
-
-        <Section title="Visit">
-          <div className="mb-3 flex items-center gap-3">
-            <ProfileAvatar photoUrl={asVet ? null : a.vet.photoUrl} name={other.name} className="size-11 text-sm ring-2" />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{other.name}</p>
-              <p className="text-xs text-muted-foreground">{asVet ? "Customer" : "Vet"}</p>
-            </div>
-          </div>
-          <dl className="space-y-1.5 text-sm">
-            <Fact label="Service" value={`${a.service.name} (${a.service.categoryLabel})`} />
-            <Fact label="When" value={`${formatSlot(a.startsAt)}, Lagos time`} />
-            <Fact label="Length" value={durationLabel(a.service.durationMinutes)} />
-            {asVet && <Fact label="Flock" value={flock ?? "Not linked to a farm record"} />}
-            <Fact label="Status" value={<BookingBadge status={a.bookingStatus} viewer={a.viewer} />} />
-            <Fact
-              label="Phone"
-              value={
-                other.phone ? (
-                  <a href={`tel:${other.phone}`} className="font-medium text-primary underline-offset-2 hover:underline">
-                    {other.phone}
-                  </a>
-                ) : asVet ? (
-                  "Shown once you accept"
-                ) : (
-                  "Not shared"
-                )
-              }
+      <div className="flex flex-1 flex-col gap-4 px-5 pb-8 md:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start lg:gap-6">
+        <div className="flex flex-col gap-4">
+          <Headline appointment={a} />
+          {visitShown && (
+            <VisitTimer
+              startedAt={a.startedAt}
+              serverNow={now.toISOString()}
+              plannedMinutes={a.service.durationMinutes}
+              running={a.bookingStatus === "in_progress"}
+              endedAt={a.completedAt}
             />
-          </dl>
-        </Section>
-
-        {visitShown && a.visit && (
-          <VisitWorkspace key={`${a.bookingStatus}.${a.visit.notesVersion}`} appointment={a} visit={a.visit} />
-        )}
-
-        <Section title="Farm location">
-          <p className="flex items-start gap-1.5 text-sm">
-            <Icon name="map-pin" className="mt-0.5 size-4 shrink-0 text-primary" />
-            <span>
-              {a.location.farmName && <span className="block font-medium">{a.location.farmName}</span>}
-              {a.location.address}, {stateLabel(a.location.state)}
-            </span>
-          </p>
-          {a.location.directions && (
-            <p className="mt-2 text-xs leading-relaxed whitespace-pre-line text-foreground/70">{a.location.directions}</p>
           )}
-        </Section>
+          <AppointmentActions appointment={a} />
 
-        <Section title="Price">
-          <div className="mb-2">
-            <PaymentBadge status={a.paymentStatus} />
-          </div>
-          <PriceBreakdown priceKobo={a.priceKobo} feeKobo={a.feeKobo} totalKobo={a.totalKobo} paymentStatus={a.paymentStatus} />
-        </Section>
+          <Section title="Visit">
+            <div className="mb-3 flex items-center gap-3">
+              <ProfileAvatar
+                photoUrl={asVet ? null : a.vet.photoUrl}
+                name={other.name}
+                className="size-11 text-sm ring-2"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{other.name}</p>
+                <p className="text-xs text-muted-foreground">{asVet ? "Customer" : "Vet"}</p>
+              </div>
+            </div>
+            <dl className="space-y-1.5 text-sm">
+              <Fact label="Service" value={`${a.service.name} (${a.service.categoryLabel})`} />
+              <Fact label="When" value={`${formatSlot(a.startsAt)}, Lagos time`} />
+              <Fact label="Length" value={durationLabel(a.service.durationMinutes)} />
+              {asVet && <Fact label="Flock" value={flock ?? "Not linked to a farm record"} />}
+              <Fact label="Status" value={<BookingBadge status={a.bookingStatus} viewer={a.viewer} />} />
+              <Fact
+                label="Phone"
+                value={
+                  other.phone ? (
+                    <a
+                      href={`tel:${other.phone}`}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      {other.phone}
+                    </a>
+                  ) : asVet ? (
+                    "Shown once you accept"
+                  ) : (
+                    "Not shared"
+                  )
+                }
+              />
+            </dl>
+          </Section>
 
-        <Section title="Booking progress">
-          <Tracker appointment={a} />
-          <p className="mt-3 text-xs text-muted-foreground">
-            Updated by the vet as the visit goes on. There&rsquo;s no live location tracking.
-          </p>
-        </Section>
+          {visitShown && a.visit && (
+            <VisitWorkspace key={`${a.bookingStatus}.${a.visit.notesVersion}`} appointment={a} visit={a.visit} />
+          )}
+        </div>
+        <div className="flex flex-col gap-4">
+          <Section title="Farm location">
+            <p className="flex items-start gap-1.5 text-sm">
+              <Icon name="map-pin" className="mt-0.5 size-4 shrink-0 text-primary" />
+              <span>
+                {a.location.farmName && <span className="block font-medium">{a.location.farmName}</span>}
+                {a.location.address}, {stateLabel(a.location.state)}
+              </span>
+            </p>
+            {a.location.directions && (
+              <p className="mt-2 text-xs leading-relaxed whitespace-pre-line text-foreground/70">
+                {a.location.directions}
+              </p>
+            )}
+          </Section>
 
-        <Section title="History">
-          <History appointment={a} />
-        </Section>
+          <Section title="Price">
+            <div className="mb-2">
+              <PaymentBadge status={a.paymentStatus} />
+            </div>
+            <PriceBreakdown
+              priceKobo={a.priceKobo}
+              feeKobo={a.feeKobo}
+              totalKobo={a.totalKobo}
+              paymentStatus={a.paymentStatus}
+            />
+          </Section>
+
+          <Section title="Booking progress">
+            <Tracker appointment={a} />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Updated by the vet as the visit goes on. There&rsquo;s no live location tracking.
+            </p>
+          </Section>
+
+          <Section title="History">
+            <History appointment={a} />
+          </Section>
+        </div>
       </div>
     </main>
   );

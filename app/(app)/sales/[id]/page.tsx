@@ -19,20 +19,24 @@ export default async function SalePage({ params }: { params: Promise<{ id: strin
   const unpaid = order.paymentStatus === "pending" || order.paymentStatus === "failed";
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Sale" back={<BackLink href="/sales" />} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <OrderHeader order={order} />
-        <IssueNotice order={order} />
-        {unpaid && order.fulfillmentStatus === "pending" && (
-          <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
-            Waiting for the buyer to pay. Don&apos;t send anything until this shows as Paid.
-          </p>
-        )}
-        <SellerActions order={order} />
-        <OrderItems order={order} />
-        <DeliveryNote order={order} />
-        <OrderHistory order={order} />
+      <div className="flex flex-1 flex-col gap-4 px-5 pb-8 md:px-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start lg:gap-6">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-6">
+          <OrderHeader order={order} />
+          <IssueNotice order={order} />
+          {unpaid && order.fulfillmentStatus === "pending" && (
+            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm leading-relaxed text-amber-900">
+              Waiting for the buyer to pay. Don&apos;t send anything until this shows as Paid.
+            </p>
+          )}
+          <SellerActions order={order} />
+        </div>
+        <div className="flex flex-col gap-4">
+          <OrderItems order={order} />
+          <DeliveryNote order={order} />
+          <OrderHistory order={order} />
+        </div>
       </div>
     </main>
   );

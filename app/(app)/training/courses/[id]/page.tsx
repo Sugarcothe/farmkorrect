@@ -24,7 +24,7 @@ export default async function CoursePage({ params }: { params: Promise<{ id: str
         : "Start course";
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Course Overview" back={<BackLink href="/training" />} />
       <div className="flex flex-1 flex-col px-5 pb-8">
         <CourseOverview

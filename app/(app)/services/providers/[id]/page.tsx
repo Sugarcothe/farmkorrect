@@ -17,44 +17,47 @@ export default async function ServiceProviderPage({ params }: { params: Promise<
   if (!p) notFound();
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Provider" back={<BackLink href="/services" />} />
-      <div className="flex flex-1 flex-col gap-4 px-5 pb-8">
-        <section className="flex flex-col items-center rounded-3xl bg-white px-5 py-6 text-center shadow-sm ring-1 ring-foreground/5">
-          <ProfileAvatar photoUrl={p.photoUrl} name={p.name} />
-          <h2 className="mt-3 text-lg font-semibold">{p.name}</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {[p.roleLabel, p.yearsOfExperience !== null ? `${p.yearsOfExperience} yrs experience` : null]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {p.credentialsVerified && (
-            <div className="mt-2">
-              <CredentialsBadge />
-            </div>
-          )}
-          {p.location && (
-            <p className="mt-3 flex items-center gap-1 text-sm text-foreground/75">
-              <Icon name="map-pin" className="size-4" />
-              {p.location}
+      <div className="flex flex-1 flex-col gap-4 px-5 pb-8 md:px-6 lg:grid lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] lg:items-start lg:gap-6">
+        <div className="flex flex-col gap-4 lg:sticky lg:top-6">
+          <section className="flex flex-col items-center rounded-3xl bg-white px-5 py-6 text-center shadow-sm ring-1 ring-foreground/5">
+            <ProfileAvatar photoUrl={p.photoUrl} name={p.name} />
+            <h2 className="mt-3 text-lg font-semibold">{p.name}</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {[p.roleLabel, p.yearsOfExperience !== null ? `${p.yearsOfExperience} yrs experience` : null]
+                .filter(Boolean)
+                .join(" · ")}
             </p>
+            {p.credentialsVerified && (
+              <div className="mt-2">
+                <CredentialsBadge />
+              </div>
+            )}
+            {p.location && (
+              <p className="mt-3 flex items-center gap-1 text-sm text-foreground/75">
+                <Icon name="map-pin" className="size-4" />
+                {p.location}
+              </p>
+            )}
+          </section>
+        </div>
+        <div className="flex flex-col gap-4">
+          {p.bio && (
+            <Section title="About">
+              <p className="text-sm leading-relaxed whitespace-pre-line text-foreground/80">{p.bio}</p>
+            </Section>
           )}
-        </section>
 
-        {p.bio && (
-          <Section title="About">
-            <p className="text-sm leading-relaxed whitespace-pre-line text-foreground/80">{p.bio}</p>
-          </Section>
-        )}
-
-        <h2 className="text-sm font-semibold">Services</h2>
-        <ul className="flex flex-col gap-3">
-          {p.services.map((s) => (
-            <li key={s.id}>
-              <ServiceCardView service={s} />
-            </li>
-          ))}
-        </ul>
+          <h2 className="text-sm font-semibold">Services</h2>
+          <ul className="flex flex-col gap-3">
+            {p.services.map((s) => (
+              <li key={s.id}>
+                <ServiceCardView service={s} />
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </main>
   );

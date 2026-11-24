@@ -21,7 +21,7 @@ export default async function CoursePreviewPage({ params }: { params: Promise<{ 
   const id = doc._id.toHexString();
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main data-wide="md" className="flex flex-1 flex-col">
       <ProfileTopBar title="Course preview" back={<BackLink href={`/admin/training/${id}`} />} />
       <div className="flex flex-1 flex-col px-5 pb-8">
         <div
